@@ -1,5 +1,4 @@
 library(data.table)
-library(Metrics)
 library(xgboost)
 library(stringi)
 library(tm)
@@ -29,8 +28,12 @@ train$is_duplicate <- as.numeric(train$is_duplicate)
 # train$question1CountWords <- sapply(train$question1,stri_count_words,USE.NAMES=FALSE)
 # train$question2CountWords <- sapply(train$question2,stri_count_words,USE.NAMES=FALSE)
 
-# Create a corpus
-dfCorpus = Corpus(VectorSource(c(train$question1,train$question2)))
+# Create a corpus without the data
+sampleSize <- 10000
+sample <- sample(1:nrow(train),sampleSize)
+print(length(sample))
+
+dfCorpus = Corpus(VectorSource(c(train$question1[-sample],train$question2[-sample])))
 inspect(dfCorpus)
 myTdm <- TermDocumentMatrix(dfCorpus, control=list(tolower=TRUE))
 
@@ -54,9 +57,36 @@ nGramHitRate <- function(question1,question2,n=1,n_min=1) {
   hitRate <- ifelse(is.infinite(hitRate),0,hitRate)
 }
 
-sampleSize <- 20000
-sample <- sample(1:nrow(train),sampleSize)
-print(length(sample))
+lastWordCount <- function(question) {
+  t <- unlist(tokenize_ngrams(question,n=1, n_min=1))
+  if (length(t)==0) 0 else {
+    #word.count[t[length(t)]]  %/% 100
+    word.count[t[length(t)]]/sum(word.count)*100
+  }
+}
+
+lastTwoWordCount <- function(question) {
+  t <- unlist(tokenize_ngrams(question,n=1, n_min=1))
+  if (length(t)<2) 0 else {
+    #word.count[t[length(t)]]  %/% 100
+    word1.count <- word.count[t[length(t)]]
+    word2.count <- word.count[t[length(t)-1]]
+    mean(c(word1.count,word2.count),na.rm=TRUE)/sum(word.count)*100/2
+  }
+}
+
+sharedWordsLastN <- function(question1,question2,n=1,stopWords) {
+  t1 <- unlist(strsplit(tolower(question1), " "))
+  t2 <- unlist(strsplit(tolower(question2), " "))
+  # remove stop words
+  t1 <- setdiff(t1,stopWords)
+  t2 <- setdiff(t2,stopWords)
+  if (length(t1)>0 & length(t2)>0) {
+    t1.idx <- max(length(t1)-n+1,1):length(t1)
+    t2.idx <- max(length(t2)-n+1,1):length(t2)
+    length(intersect(t1[t1.idx],t2[t2.idx]))
+  } else 0
+}
 
 j <- 1
 for (i in sample) {
@@ -65,33 +95,15 @@ for (i in sample) {
 
   train[i,nGramHitRate11 := nGramHitRate(question1,question2,1,1)]
   train[i,nGramHitRate22 := nGramHitRate(question1,question2,2,2)]
-
-  if (length(t1) >0) train[i,lastWordCount1:=word.count[t1[length(t1)]]]
-  if (length(t2) >0) train[i,lastWordCount2:=word.count[t2[length(t2)]]]
+  train[i,nGramHitRate33 := nGramHitRate(question1,question2,3,3)]
+  train[i,nGramHitRate44 := nGramHitRate(question1,question2,4,4)]
+  train[i,nGramHitRate55 := nGramHitRate(question1,question2,5,5)]
+  train[i,nGramHitRate53 := nGramHitRate(question1,question2,5,3)]
   
-  t1 <- unlist(tokenize_ngrams(train$question1[i],n=2, n_min=2))
-  t2 <- unlist(tokenize_ngrams(train$question2[i],n=2, n_min=2))
-  sharedPhrases <- intersect(t1,t2)
-
-  bothLengths <- length(t1)+length(t2)
-  train[i,nGramHitRate22 := 2*length(sharedPhrases)/bothLengths]
-  train[i,nGramHitRate22 := ifelse(is.infinite(nGramHitRate22),0,nGramHitRate22)]
-
-  t1 <- unlist(tokenize_ngrams(train$question1[i],n=3, n_min=3))
-  t2 <- unlist(tokenize_ngrams(train$question2[i],n=3, n_min=3))
-  sharedPhrases <- intersect(t1,t2)
-  
-  bothLengths <- length(t1)+length(t2)
-  train[i,nGramHitRate33 := 2*length(sharedPhrases)/bothLengths]
-  train[i,nGramHitRate33 := ifelse(is.infinite(nGramHitRate33),0,nGramHitRate33)]
-  
-  t1 <- unlist(tokenize_ngrams(train$question1[i],n=4, n_min=4))
-  t2 <- unlist(tokenize_ngrams(train$question2[i],n=4, n_min=4))
-  sharedPhrases <- intersect(t1,t2)
-  
-  bothLengths <- length(t1)+length(t2)
-  train[i,nGramHitRate44 := 2*length(sharedPhrases)/bothLengths]
-  train[i,nGramHitRate44 := ifelse(is.infinite(nGramHitRate44),0,nGramHitRate44)]
+  train[i,lastWordCount1:=lastWordCount(question1)]
+  train[i,lastWordCount2:=lastWordCount(question2)]
+  train[i,lastTwoWordCount1:=lastTwoWordCount(question1)]
+  train[i,lastTwoWordCount2:=lastTwoWordCount(question2)]
   
   # # # 
   t1 <- unlist(strsplit(tolower(train$question1[i]), " "))
@@ -107,6 +119,7 @@ for (i in sample) {
   train[i,nCommonWords :=length(sharedWords)]
   train[i,nWordsFirst := length(t1)]
   train[i,nWordsSecond := length(t2)]
+  train[i,nCommonWordsLastThree := sharedWordsLastN(question1,question2,3,stopWords)]
   
   # Last word
   if (length(t1)>0 & length(t2)>0) {
@@ -135,31 +148,38 @@ for (i in sample) {
   j = j+1
 }
 
-auc(train$is_duplicate[sample],train$nGramHitRate[sample])
-auc(train$is_duplicate[sample],train$nGramHitRate22[sample])
-auc(train$is_duplicate[sample],train$nGramHitRate33[sample])
-auc(train$is_duplicate[sample],train$lastWord[sample])
+# auc(train$is_duplicate[sample],train$nGramHitRate[sample])
+# auc(train$is_duplicate[sample],train$nGramHitRate22[sample])
+# auc(train$is_duplicate[sample],train$nGramHitRate33[sample])
+# auc(train$is_duplicate[sample],train$lastWord[sample])
 
 samplePos <- intersect(which(train$is_duplicate==1),sample)
 sampleNeg <- intersect(which(train$is_duplicate==0),sample)
 positivePct <- length(samplePos)/length(sample)
 negativePct <- (1-positivePct)
 positiveTargetPct <- 0.165
+#positiveTargetPct <- 0.36
 negativeTargetPct <- 1- positiveTargetPct
 
+# Oversample the negatives, but keep track of them 
 add <- as.integer((negativeTargetPct*sampleSize - length(sampleNeg))/(1-negativeTargetPct))
-newSample <- c(samplePos,sample(sampleNeg, length(sampleNeg) + add, replace=TRUE))
+sampleNeg <- sample(sampleNeg, length(sampleNeg), replace=TRUE)
+sampleNegAdd <- sample(sampleNeg, add, replace=TRUE)
 
-train.final <- train[newSample]
+#train.final <- train[newSample]
+#train.final <- train[sample]
 s <- sample(1:nrow(train.final),0.8*nrow(train.final))
 
-xgb_params = list(seed = 0,subsample = 0.9,
-  eta = 0.1,max_depth =8,num_parallel_tree = 1,min_child_weight = 1,
+xgb_params = list(seed = 0,subsample = 0.8,
+  eta = 0.1,max_depth =4,num_parallel_tree = 1,min_child_weight = 2,
   objective='binary:logistic',eval_metric = 'logloss')
 
-feature.names <- c("nGramHitRate","nGramHitRate11","nGramHitRate22","nGramHitRate33","nGramHitRate44","lastWord","lastTwoWords",
-                   "nCommonWords","nWordsFirst","nWordsSecond")
-                   #"lastWordCount1","lastWordCount2")
+feature.names <- c("nGramHitRate","nGramHitRate11","nGramHitRate22","nGramHitRate33",
+                   "nGramHitRate44","nGramHitRate55",#"nGramHitRate53",
+                   "lastWord","lastTwoWords","nCommonWordsLastThree",
+                   "nCommonWords","nWordsFirst","nWordsSecond",
+                   "lastWordCount1","lastWordCount2","lastTwoWordCount1","lastTwoWordCount2"
+                   )
 #feature.names <- c("nGramHitRate")
 
 dtrain = xgb.DMatrix(as.matrix(train.final[s,feature.names,with=FALSE]), label=train.final$is_duplicate[s], missing=NA)
@@ -167,7 +187,7 @@ dvalid = xgb.DMatrix(as.matrix(train.final[-s,feature.names,with=FALSE]), label=
 dall = xgb.DMatrix(as.matrix(train.final[,feature.names,with=FALSE]), label=train.final$is_duplicate, missing=NA)
 
 watchlist <- list(train=dtrain,valid=dvalid)
-xgboost.fit <- xgb.train (data=dtrain,xgb_params,missing=NA,early_stopping_rounds =  100,nrounds=10000,
+xgboost.fit <- xgb.train (data=dtrain,xgb_params,missing=NA,early_stopping_rounds =  10,nrounds=10000,
                           maximize=FALSE,verbose = TRUE,print_every_n=10,watchlist = watchlist)
 
 train.final$pred <- predict(xgboost.fit,dall)
