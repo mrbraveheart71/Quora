@@ -11,6 +11,9 @@ library(stringdist)
 library(wordVectors)
 library(koRpus)
 library(SnowballC)
+library(coreNLP)
+
+#initCoreNLP(libLoc = "C:/R-Studio/Quora/stanford-corenlp-full-2016-10-31",type="english")
 
 MultiLogLoss <- function(act, pred){
   eps <- 1e-15
@@ -43,6 +46,20 @@ stopWords <- tm::stopwords(kind="en")
 wordVecSpace <- read.binary.vectors("GoogleNews-vectors-negative300.bin",nrows=100000)
 words.google <-  attr(wordVecSpace, which="dimnames")[[1]]
 
+sentenceOverlap <- function(question1,question2,n=10,stopWords) {
+  t1 <- tokenize_ngrams(question1,n=n, n_min=1,stopwords=stopWords,simplify=TRUE)
+  q1Length <- length(tokenize_words(question1,stopwords = stopWords,simplify=TRUE))
+  t2 <- tokenize_ngrams(question2,n=n, n_min=1,stopwords=stopWords,simplify =TRUE)
+  q2Length <- length(tokenize_words(question2,stopwords = stopWords,simplify=TRUE))
+  overlap <- intersect(t1,t2)
+  if (length(overlap>0)) { 
+    overlapSum <- sum(sapply(overlap,function(x) length(tstrsplit(x," "))^2))
+  } else {
+    overlapSum <- 0
+  }
+  #ret <- tanh(overlapSum/(q1Length+q2Length))
+  ret <- overlapSum
+}
 
 nGramSkipHitRate <- function(question1,question2,n=2,k=1) {
   t1 <- tokenize_skip_ngrams(question1,n=n, k=k, simplify = TRUE)
@@ -115,7 +132,6 @@ sharedApproximateWords <- function(question1,question2,googleDictMin=500, approx
   length(sharedPhrases)/(0.5*length(t1)+0.5*length(t2))
 }
 
-
 lastWordCount <- function(question,stopwords=NULL) {
   t <- unlist(tokenize_ngrams(question,n=1, n_min=1,stopwords=stopWords))
   if (length(t)==0) 0 else {
@@ -149,7 +165,7 @@ sharedWordsLastN <- function(question1,question2,n=1,stopWords) {
 
 
 # Create a corpus without the data
-sampleSize <- 10000
+sampleSize <- 30000
 sample <- sample(1:nrow(train),sampleSize)
 print(length(sample))
 
@@ -165,15 +181,15 @@ for (i in sample) {
   train[i,nGramHitRate11_0 := nGramHitRate(question1,question2,1,1,0)]
   train[i,nGramHitRate22_0 := nGramHitRate(question1,question2,2,2,0)]
   train[i,nGramHitRate33_0 := nGramHitRate(question1,question2,3,3,0)]
-  train[i,nGramHitRate44_0 := nGramHitRate(question1,question2,4,4,0)]
-  train[i,nGramHitRate55_0 := nGramHitRate(question1,question2,5,5,0)]
+  #train[i,nGramHitRate44_0 := nGramHitRate(question1,question2,4,4,0)]
+  #train[i,nGramHitRate55_0 := nGramHitRate(question1,question2,5,5,0)]
   
-    # train[i,nGramHitRate44 := nGramHitRate(question1,question2,4,4,500)]
+  # train[i,nGramHitRate44 := nGramHitRate(question1,question2,4,4,500)]
   # train[i,nGramHitRate55 := nGramHitRate(question1,question2,5,5,500)]
   # 
-  train[i,nGramHitRate11_5000 := nGramHitRate(question1,question2,1,1,5000)]
-  train[i,nGramHitRate22_5000 := nGramHitRate(question1,question2,2,2,5000)]
-  train[i,nGramHitRate33_5000 := nGramHitRate(question1,question2,3,3,5000)]
+  # train[i,nGramHitRate11_5000 := nGramHitRate(question1,question2,1,1,5000)]
+  # train[i,nGramHitRate22_5000 := nGramHitRate(question1,question2,2,2,5000)]
+  # train[i,nGramHitRate33_5000 := nGramHitRate(question1,question2,3,3,5000)]
 
   train[i,nGramSkipHitRate21 := nGramSkipHitRate(question1,question2,2,1)]
   train[i,nGramSkipHitRate31 := nGramSkipHitRate(question1,question2,3,1)]
@@ -186,7 +202,6 @@ for (i in sample) {
   # # # 
   t1 <- unlist(strsplit(tolower(train$question1[i]), " "))
   t2 <- unlist(strsplit(tolower(train$question2[i]), " "))
-  
   train[i,firstWordEqual := ifelse(t1[1]==t2[1],1,0)]
   # remove stop words
   t1 <- setdiff(t1,stopWords)
@@ -195,12 +210,16 @@ for (i in sample) {
   bothLengths <- length(t1)+length(t2)
   train[i,nGramHitRate := 2*length(sharedWords)/bothLengths]
   train[i,nGramHitRate := ifelse(is.infinite(nGramHitRate),0,nGramHitRate)]
-  train[i,nCommonWords :=length(sharedWords)]
-  train[i,nWordsFirst := length(t1)]
-  train[i,nWordsSecond := length(t2)]
-  #train[i,nCommonWordsLastThree := sharedWordsLastN(question1,question2,3,stopWords)]
-  #train[i,sharedWeightedWords := sharedWeightedWords(question1,question2,stopWords)]
   
+  train[i,nCommonWords :=length(unique(sharedWords))]
+  train[i,nWordsFirst := length(unique(t1))]
+  train[i,nWordsSecond := length(unique(t2))]
+  
+  t1t <- unlist(tokenize_ngrams(train$question1[i],n=1, n_min=1))
+  t2t <- unlist(tokenize_ngrams(train$question2[i],n=1, n_min=1))
+  train[i, q1Minusq2 := length(setdiff(t1t,t2t))]
+  train[i, q2Minusq1 := length(setdiff(t2t,t1t))]
+
   j = j+1
 }
 
@@ -222,31 +241,31 @@ s <- c( samplePos[1:(0.8*length(samplePos))], sampleNeg[1:(length(sampleNeg)*0.8
 v <- c( samplePos[(as.integer(0.8*length(samplePos)+1)):length(samplePos)],
         sampleNeg[(as.integer(0.8*length(sampleNeg)+1)):length(sampleNeg)])
 
-# Additional columns
+#Additional columns
 j <- 1
 for (i in sample) {
   print(j)
-  train[i,nGramHitRateStem33 := nGramHitRateStem(question1,question2,3,3,0)]
-
+  #train[i,sentenceOverlap100:= sentenceOverlap(question1,question2,20,100)]
+  train[i,sentenceOverlap:= sentenceOverlap(question1,question2,20,"")]
+  
   #   train[i,lastTwoWordCount1:=lastTwoWordCount(question1)]
   #   train[i,lastTwoWordCount2:=lastTwoWordCount(question2)]
-  
+
   j = j+1
 }
 
-xgb_params = list(seed = 0,subsample = 0.9,
-  eta = 0.05,max_depth =6,num_parallel_tree = 1,min_child_weight = 2,
+xgb_params = list(seed = 0,subsample = 1,
+  eta = 0.1,max_depth =6,num_parallel_tree = 1,min_child_weight = 2,
   objective='binary:logistic',eval_metric = 'logloss')
 
 feature.names <- c("nGramHitRate",
-                   "nGramHitRate11","nGramHitRate22","nGramHitRate33",#"nGramHitRate44","nGramHitRate55",
-                   "nGramHitRate11_0","nGramHitRate22_0","nGramHitRate33_0","nGramHitRate33_0","nGramHitRate55_0",
-                   "nGramHitCount55_0",
-                   "nGramHitRateStem33",
-                   "nGramHitRate11_5000","nGramHitRate22_5000","nGramHitRate33_5000",
-                   "nGramSkipHitRate21","nGramSkipHitRate31","nGramSkipHitRate41","nGramSkipHitRate42",
-                   "nCommonWords","nWordsFirst","nWordsSecond","firstWordEqual"
-                   #"lastWordCount1","lastWordCount2","lastTwoWordCount1","lastTwoWordCount2"
+                   #"nGramHitRate11","nGramHitRate22","nGramHitRate33",#"nGramHitRate44","nGramHitRate55",
+                   #"nGramHitRate11_0","nGramHitRate22_0","nGramHitRate33_0","nGramHitRate33_0",#"nGramHitRate55_0",
+                   #"q1Minusq2",
+                   "sentenceOverlap"
+                   #"q1Minusq2","q2Minusq1",
+                   #"nGramSkipHitRate21","nGramSkipHitRate31","nGramSkipHitRate41","nGramSkipHitRate42",
+                   #"nCommonWords","nWordsFirst","nWordsSecond","firstWordEqual"
                    )
 
 dtrain = xgb.DMatrix(as.matrix(train[s,feature.names,with=FALSE]), label=train$is_duplicate[s], missing=NA)
@@ -260,13 +279,15 @@ xgboost.fit <- xgb.train (data=dtrain,xgb_params,missing=NA,early_stopping_round
 train$pred[sample] <- predict(xgboost.fit,dall)
 xgb.importance(feature.names,xgboost.fit)
 
+# check 97186, something wrong
+
 # save model and data
 save(list=c("xgboost.fit","feature.names","train","s","v","sample","word.count","words"), file="Quora Save Model")
 load("Quora Save Model")
 
 # Mistakes made
 train.final <- train[sample]
-train.final[abs(train.final$pred - train.final$is_duplicate) > 0.6]
+train.final[abs(train.final$pred - train.final$is_duplicate) > 0.9]
 t <- train.final[abs(train.final$pred - train.final$is_duplicate) < 0.1]
 t[t$is_duplicate==1]
 
