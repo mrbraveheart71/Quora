@@ -13,7 +13,7 @@ library(koRpus)
 library(SnowballC)
 library(coreNLP)
 
-#initCoreNLP(libLoc = "C:/R-Studio/Quora/stanford-corenlp-full-2016-10-31",type="english")
+initCoreNLP(libLoc = "C:/R-Studio/Quora/stanford-corenlp-full-2016-10-31",type="english")
 
 MultiLogLoss <- function(act, pred){
   eps <- 1e-15
@@ -46,7 +46,24 @@ stopWords <- tm::stopwords(kind="en")
 wordVecSpace <- read.binary.vectors("GoogleNews-vectors-negative300.bin",nrows=100000)
 words.google <-  attr(wordVecSpace, which="dimnames")[[1]]
 
-sentenceOverlap <- function(question1,question2,n=10,stopWords) {
+nGramHitRate <- function(question1,question2,n=1,n_min=1,googleDictMin=500,stemming=TRUE) {
+  if (stemming==TRUE) {
+    question1 <- paste0(tokenize_word_stems(question1,language="en", simplify=TRUE),collapse=" ")
+    question2 <- paste0(tokenize_word_stems(question2,language="en", simplify=TRUE),collapse=" ")
+  }
+  t1 <- unlist(tokenize_ngrams(question1,n=n, n_min=n_min,stopwords=words.google[1:googleDictMin]))
+  t2 <- unlist(tokenize_ngrams(question2,n=n, n_min=n_min,stopwords=words.google[1:googleDictMin]))
+  sharedPhrases <- intersect(t1,t2)
+  bothLengths <- length(t1)+length(t2)
+  hitRate <- 2*length(sharedPhrases)/bothLengths
+  hitRate <- ifelse(is.infinite(hitRate) | is.nan(hitRate),0,hitRate)
+  hitRate
+}
+
+sentenceOverlap <- function(question1,question2,n=20,stopWords,stemming=TRUE) {
+  # Do stemming first
+  question1 <- paste0(tokenize_word_stems(question1,language="en", simplify=TRUE),collapse=" ")
+  question2 <- paste0(tokenize_word_stems(question2,language="en", simplify=TRUE),collapse=" ")
   t1 <- tokenize_ngrams(question1,n=n, n_min=1,stopwords=stopWords,simplify=TRUE)
   q1Length <- length(tokenize_words(question1,stopwords = stopWords,simplify=TRUE))
   t2 <- tokenize_ngrams(question2,n=n, n_min=1,stopwords=stopWords,simplify =TRUE)
@@ -58,7 +75,8 @@ sentenceOverlap <- function(question1,question2,n=10,stopWords) {
     overlapSum <- 0
   }
   #ret <- tanh(overlapSum/(q1Length+q2Length))
-  ret <- overlapSum
+  #ret <- overlapSum
+  ret <- overlapSum/(q1Length+q2Length)
 }
 
 nGramSkipHitRate <- function(question1,question2,n=2,k=1) {
@@ -70,17 +88,6 @@ nGramSkipHitRate <- function(question1,question2,n=2,k=1) {
   hitRate <- ifelse(is.infinite(hitRate),0,hitRate)
   hitRate
 }
-
-nGramHitRate <- function(question1,question2,n=1,n_min=1,googleDictMin=500) {
-  t1 <- unlist(tokenize_ngrams(question1,n=n, n_min=n_min,stopwords=words.google[1:googleDictMin]))
-  t2 <- unlist(tokenize_ngrams(question2,n=n, n_min=n_min,stopwords=words.google[1:googleDictMin]))
-  sharedPhrases <- intersect(t1,t2)
-  bothLengths <- length(t1)+length(t2)
-  hitRate <- 2*length(sharedPhrases)/bothLengths
-  hitRate <- ifelse(is.infinite(hitRate) | is.nan(hitRate),0,hitRate)
-  hitRate
-}
-
 
 nGramHitRateStem <- function(question1,question2,n=1,n_min=1,googleDictMin=500) {
   t1 <- tokenize_ngrams(question1,n=1, n_min=1,stopwords=words.google[1:googleDictMin], simplify = TRUE)
@@ -165,7 +172,7 @@ sharedWordsLastN <- function(question1,question2,n=1,stopWords) {
 
 
 # Create a corpus without the data
-sampleSize <- 30000
+sampleSize <- 5000
 sample <- sample(1:nrow(train),sampleSize)
 print(length(sample))
 
@@ -183,6 +190,7 @@ for (i in sample) {
   train[i,nGramHitRate33_0 := nGramHitRate(question1,question2,3,3,0)]
   #train[i,nGramHitRate44_0 := nGramHitRate(question1,question2,4,4,0)]
   #train[i,nGramHitRate55_0 := nGramHitRate(question1,question2,5,5,0)]
+  train[i,sentenceOverlap:= sentenceOverlap(question1,question2,20,"")]
   
   # train[i,nGramHitRate44 := nGramHitRate(question1,question2,4,4,500)]
   # train[i,nGramHitRate55 := nGramHitRate(question1,question2,5,5,500)]
@@ -223,7 +231,6 @@ for (i in sample) {
   j = j+1
 }
 
-
 samplePos <- intersect(which(train$is_duplicate==1),sample)
 sampleNeg <- intersect(which(train$is_duplicate==0),sample)
 positivePct <- length(samplePos)/length(sample)
@@ -245,27 +252,28 @@ v <- c( samplePos[(as.integer(0.8*length(samplePos)+1)):length(samplePos)],
 j <- 1
 for (i in sample) {
   print(j)
-  #train[i,sentenceOverlap100:= sentenceOverlap(question1,question2,20,100)]
-  train[i,sentenceOverlap:= sentenceOverlap(question1,question2,20,"")]
+  train[i,nGramHitRate11_0 := nGramHitRate(question1,question2,1,1,0)]
+  train[i,nGramHitRate22_0 := nGramHitRate(question1,question2,2,2,0)]
+  train[i,nGramHitRate33_0 := nGramHitRate(question1,question2,3,3,0)]
   
   #   train[i,lastTwoWordCount1:=lastTwoWordCount(question1)]
   #   train[i,lastTwoWordCount2:=lastTwoWordCount(question2)]
-
+  
   j = j+1
 }
 
 xgb_params = list(seed = 0,subsample = 1,
-  eta = 0.1,max_depth =6,num_parallel_tree = 1,min_child_weight = 2,
+  eta = 0.1,max_depth =4,num_parallel_tree = 1,min_child_weight = 2,
   objective='binary:logistic',eval_metric = 'logloss')
 
 feature.names <- c("nGramHitRate",
-                   #"nGramHitRate11","nGramHitRate22","nGramHitRate33",#"nGramHitRate44","nGramHitRate55",
-                   #"nGramHitRate11_0","nGramHitRate22_0","nGramHitRate33_0","nGramHitRate33_0",#"nGramHitRate55_0",
+                   "nGramHitRate11","nGramHitRate22","nGramHitRate33",#"nGramHitRate44","nGramHitRate55",
+                   "nGramHitRate11_0","nGramHitRate22_0","nGramHitRate33_0","nGramHitRate33_0",#"nGramHitRate55_0",
                    #"q1Minusq2",
-                   "sentenceOverlap"
-                   #"q1Minusq2","q2Minusq1",
-                   #"nGramSkipHitRate21","nGramSkipHitRate31","nGramSkipHitRate41","nGramSkipHitRate42",
-                   #"nCommonWords","nWordsFirst","nWordsSecond","firstWordEqual"
+                   "sentenceOverlap",
+                   "q1Minusq2","q2Minusq1",
+                   "nGramSkipHitRate21","nGramSkipHitRate31","nGramSkipHitRate41","nGramSkipHitRate42",
+                   "nCommonWords","nWordsFirst","nWordsSecond","firstWordEqual"
                    )
 
 dtrain = xgb.DMatrix(as.matrix(train[s,feature.names,with=FALSE]), label=train$is_duplicate[s], missing=NA)
@@ -279,7 +287,8 @@ xgboost.fit <- xgb.train (data=dtrain,xgb_params,missing=NA,early_stopping_round
 train$pred[sample] <- predict(xgboost.fit,dall)
 xgb.importance(feature.names,xgboost.fit)
 
-# check 97186, something wrong
+# check 23015, how to improve
+train[23015]
 
 # save model and data
 save(list=c("xgboost.fit","feature.names","train","s","v","sample","word.count","words"), file="Quora Save Model")
@@ -287,7 +296,7 @@ load("Quora Save Model")
 
 # Mistakes made
 train.final <- train[sample]
-train.final[abs(train.final$pred - train.final$is_duplicate) > 0.9]
+train.final[abs(train.final$pred - train.final$is_duplicate) > 0.6][1:10]
 t <- train.final[abs(train.final$pred - train.final$is_duplicate) < 0.1]
 t[t$is_duplicate==1]
 
