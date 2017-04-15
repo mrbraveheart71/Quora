@@ -13,7 +13,7 @@ library(koRpus)
 library(SnowballC)
 library(coreNLP)
 
-initCoreNLP(libLoc = "C:/R-Studio/Quora/stanford-corenlp-full-2016-10-31",type="english")
+#initCoreNLP(libLoc = "C:/R-Studio/Quora/stanford-corenlp-full-2016-10-31",type="english")
 
 MultiLogLoss <- function(act, pred){
   eps <- 1e-15
@@ -31,6 +31,29 @@ train  <- fread( "./train.csv")
 test  <- fread( "./test.csv")
 
 train$is_duplicate <- as.numeric(train$is_duplicate)
+
+# Doodling here
+word.tuples <- table(c(unlist(sapply(train$question1,function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE),
+                       unlist(sapply(train$question2,function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE)))
+word.tuples.test <- table(c(unlist(sapply(test$question1[1:400000],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE),
+                       unlist(sapply(test$question2[1:400000],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE)))
+print("intersect")
+length(intersect(names(word.tuples.test[word.tuples.test>5000]),names(word.tuples[word.tuples>5000])))
+print("untion")
+length(union(names(word.tuples.test[word.tuples.test>5000]),names(word.tuples[word.tuples>5000])))
+
+word.triples <- table(c(unlist(sapply(train$question1,function(x) tokenize_ngrams(x,n=3,n_min=3)),use.names = FALSE),
+                       unlist(sapply(train$question2,function(x) tokenize_ngrams(x,n=3,n_min=3)),use.names = FALSE)))
+
+save("word.tuples","word.triples",file="Word Combinations Quora")
+
+term <- "macbook pro"
+mean(train$is_duplicate[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))])
+sum(train$is_duplicate[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))])
+train[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))]
+
+word.tuples[word.tuples>500]
+word.triples[word.triples>500]
 
 #dfCorpus = Corpus(VectorSource(c(train$question1[-sample],train$question2[-sample])))
 #inspect(dfCorpus
@@ -262,6 +285,14 @@ for (i in sample) {
   j = j+1
 }
 
+
+# train[,TrumpPresidency:= train$question1 %like% 'Trump presidency' & train$question2 %like% 'Trump presidency']
+# train[,HillaryClinton:= train$question1 %like% 'Hillary Clinton' & train$question2 %like% 'Hillary Clinton']
+# train[,India:= train$question1 %like% 'India' & train$question2 %like% 'India']
+mean(train$is_duplicate[grepl("japan",tolower(train$question2)) & grepl("japan",tolower(train$question1))])
+sum(train$is_duplicate[grepl("clinton|trump",tolower(train$question2)) & grepl("clinton|trump",tolower(train$question1))])
+
+
 xgb_params = list(seed = 0,subsample = 1,
   eta = 0.1,max_depth =4,num_parallel_tree = 1,min_child_weight = 2,
   objective='binary:logistic',eval_metric = 'logloss')
@@ -270,6 +301,8 @@ feature.names <- c("nGramHitRate",
                    "nGramHitRate11","nGramHitRate22","nGramHitRate33",#"nGramHitRate44","nGramHitRate55",
                    "nGramHitRate11_0","nGramHitRate22_0","nGramHitRate33_0","nGramHitRate33_0",#"nGramHitRate55_0",
                    #"q1Minusq2",
+                   "HillaryClinton",
+                   #"India",
                    "sentenceOverlap",
                    "q1Minusq2","q2Minusq1",
                    "nGramSkipHitRate21","nGramSkipHitRate31","nGramSkipHitRate41","nGramSkipHitRate42",
