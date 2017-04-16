@@ -13,6 +13,7 @@ library(koRpus)
 library(SnowballC)
 library(coreNLP)
 
+
 #initCoreNLP(libLoc = "C:/R-Studio/Quora/stanford-corenlp-full-2016-10-31",type="english")
 
 MultiLogLoss <- function(act, pred){
@@ -29,41 +30,88 @@ getWordWeights <- function(count,eps=5000,min_count=2) {
 setwd <- "C:/R-Studio/Quora"
 train  <- fread( "./train.csv")
 test  <- fread( "./test.csv")
-
 train$is_duplicate <- as.numeric(train$is_duplicate)
 
-# Doodling here
-word.tuples <- table(c(unlist(sapply(train$question1,function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE),
-                       unlist(sapply(train$question2,function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE)))
-word.tuples.test <- table(c(unlist(sapply(test$question1[1:400000],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE),
-                       unlist(sapply(test$question2[1:400000],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE)))
-print("intersect")
-length(intersect(names(word.tuples.test[word.tuples.test>5000]),names(word.tuples[word.tuples>5000])))
-print("untion")
-length(union(names(word.tuples.test[word.tuples.test>5000]),names(word.tuples[word.tuples>5000])))
+getNGramMatch <- function(question1,question2,is_duplicate,n=2) {
+  t1 <- tokenize_ngrams(question1,n=n,n_min=n,simplify = TRUE)
+  t2 <- tokenize_ngrams(question2,n=n,n_min=n,simplify = TRUE)
+  sharedPhrases <- intersect(t1,t2)
+  if (length(sharedPhrases) > 0) {
+    ret <- cbind(sharedPhrases,is_duplicate)
+  } else {
+    ret <- NULL
+  }
+  ret
+}
 
-word.triples <- table(c(unlist(sapply(train$question1,function(x) tokenize_ngrams(x,n=3,n_min=3)),use.names = FALSE),
-                       unlist(sapply(train$question2,function(x) tokenize_ngrams(x,n=3,n_min=3)),use.names = FALSE)))
+# Tuple generatio
+nTupleDiagnostics <- function(n=2) {
+  word.tuples <- mapply(getNGramMatch, train$question1,train$question2,train$is_duplicate,n,USE.NAMES=FALSE, SIMPLIFY=TRUE)
+  word.tuples <- list.clean(word.tuples, fun = is.null, recursive = FALSE)
+  word.tuples <- list.rbind(word.tuples)
+  word.tuples <- as.data.table(word.tuples)
+  word.tuples$is_duplicate <- as.numeric(word.tuples$is_duplicate)
+  setkeyv(word.tuples,c("sharedPhrases"))
+  tuple.mean.duplicate <- word.tuples[,j=list(prob=mean(is_duplicate),count=length(is_duplicate)),by=list(sharedPhrases)]
+  tuple.mean.duplicate  
+}
+
+t1 <- nTupleDiagnostics(1)
+t2 <- nTupleDiagnostics(2)
+t3 <- nTupleDiagnostics(3)
+t4 <- nTupleDiagnostics(4)
+
+
+t <- t4[t4$count > 50 & t4$prob>0.50]
+sum(t$count)
+term <- 'your new year' # 112
+s <- train[tolower(train$question1) %like% term & tolower(train$question2) %like% term]
+s[1:5]
+st <- test[tolower(test$question1) %like% term & tolower(test$question2) %like% term]
+st[1:5]
+
+# Doodling here
+# word.tuples <- c(unlist(sapply(train$question1[1:10],function(x) tokenize_ngrams(x,n=2,n_min=2,simplify = FALSE)),use.names = FALSE),
+#                        unlist(sapply(train$question2[1:10],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE))
+# 
+# word.tuples <- table(c(unlist(sapply(train$question1,function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE),
+#                        unlist(sapply(train$question2,function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE)))
+# word.tuples.test <- table(c(unlist(sapply(test$question1[1:400000],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE),
+#                        unlist(sapply(test$question2[1:400000],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE)))
+# print("intersect")
+# length(intersect(names(word.tuples.test[word.tuples.test>5000]),names(word.tuples[word.tuples>5000])))
+# print("untion")
+# length(union(names(word.tuples.test[word.tuples.test>5000]),names(word.tuples[word.tuples>5000])))
+# 
+# word.triples <- table(c(unlist(sapply(train$question1,function(x) tokenize_ngrams(x,n=3,n_min=3)),use.names = FALSE),
+#                        unlist(sapply(train$question2,function(x) tokenize_ngrams(x,n=3,n_min=3)),use.names = FALSE)))
 
 save("word.tuples","word.triples",file="Word Combinations Quora")
+load("Word Combinations Quora")
 
-term <- "macbook pro"
-mean(train$is_duplicate[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))])
-sum(train$is_duplicate[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))])
-train[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))]
-
-word.tuples[word.tuples>500]
-word.triples[word.triples>500]
+word.tuples.most.common <- word.tuples[word.tuples>500]
+word.comb.features <- as.vector(NULL)
+for (tuple in 1:nrow(word.tuples.most.common)) {
+    term <- names(word.tuples.most.common[tuple])
+    print(paste0("Tuple : ",tuple, " of ",nrow(word.tuples.most.common)))
+    print(paste0("The term is : ",term))  
+    tuple.mean <- mean(train$is_duplicate[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))])
+    tuple.sum <- sum(train$is_duplicate[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))])
+    # add the feature
+    if (tuple.mean > 0.7 & !is.nan(tuple.mean)) {
+      feature.name <- paste0("feature_",paste0(unlist(strsplit(term," ")),collapse="_"))
+      word.comb.features <- c(word.comb.features,feature.name)
+      print(paste0("The mean is: ",tuple.mean," and the sum duplicates are ",tuple.sum))
+      train[,eval(feature.name) := as.numeric(grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1)))]
+    }
+}
+#train[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))]
 
 #dfCorpus = Corpus(VectorSource(c(train$question1[-sample],train$question2[-sample])))
 #inspect(dfCorpus
 #myTdm <- TermDocumentMatrix(dfCorpus, control=list(tolower=TRUE))
-
 #word.count <- slam::row_sums(myTdm)
 #word.weight <- sapply(word.count, function(x) getWordWeights(x,5000,2))
-  
-# seldomWords <- names(word.count[word.count < 15000])
-# frequentWords <- names(word.count[word.count >= 15000])
 stopWords <- tm::stopwords(kind="en")
 
 wordVecSpace <- read.binary.vectors("GoogleNews-vectors-negative300.bin",nrows=100000)
@@ -195,7 +243,7 @@ sharedWordsLastN <- function(question1,question2,n=1,stopWords) {
 
 
 # Create a corpus without the data
-sampleSize <- 5000
+sampleSize <- 100000
 sample <- sample(1:nrow(train),sampleSize)
 print(length(sample))
 
@@ -203,7 +251,7 @@ j <- 1
 for (i in sample) {
 #for (i in 1:100) {
   if (j %% 10 == 0) print(j)
-
+  
   train[i,nGramHitRate11 := nGramHitRate(question1,question2,1,1,500)]
   train[i,nGramHitRate22 := nGramHitRate(question1,question2,2,2,500)]
   train[i,nGramHitRate33 := nGramHitRate(question1,question2,3,3,500)]
@@ -272,42 +320,27 @@ v <- c( samplePos[(as.integer(0.8*length(samplePos)+1)):length(samplePos)],
         sampleNeg[(as.integer(0.8*length(sampleNeg)+1)):length(sampleNeg)])
 
 #Additional columns
-j <- 1
-for (i in sample) {
-  print(j)
-  train[i,nGramHitRate11_0 := nGramHitRate(question1,question2,1,1,0)]
-  train[i,nGramHitRate22_0 := nGramHitRate(question1,question2,2,2,0)]
-  train[i,nGramHitRate33_0 := nGramHitRate(question1,question2,3,3,0)]
-  
-  #   train[i,lastTwoWordCount1:=lastTwoWordCount(question1)]
-  #   train[i,lastTwoWordCount2:=lastTwoWordCount(question2)]
-  
-  j = j+1
-}
-
-
-# train[,TrumpPresidency:= train$question1 %like% 'Trump presidency' & train$question2 %like% 'Trump presidency']
-# train[,HillaryClinton:= train$question1 %like% 'Hillary Clinton' & train$question2 %like% 'Hillary Clinton']
-# train[,India:= train$question1 %like% 'India' & train$question2 %like% 'India']
-mean(train$is_duplicate[grepl("japan",tolower(train$question2)) & grepl("japan",tolower(train$question1))])
-sum(train$is_duplicate[grepl("clinton|trump",tolower(train$question2)) & grepl("clinton|trump",tolower(train$question1))])
-
+# j <- 1
+# for (i in sample) {
+#   print(j)
+#   train[i,nGramHitRate11 := nGramHitRate(question1,question2,1,1,500)]
+#   
+#   j = j+1
+# }
 
 xgb_params = list(seed = 0,subsample = 1,
-  eta = 0.1,max_depth =4,num_parallel_tree = 1,min_child_weight = 2,
+  eta = 0.1,max_depth =7,num_parallel_tree = 1,min_child_weight = 2,
   objective='binary:logistic',eval_metric = 'logloss')
 
 feature.names <- c("nGramHitRate",
                    "nGramHitRate11","nGramHitRate22","nGramHitRate33",#"nGramHitRate44","nGramHitRate55",
                    "nGramHitRate11_0","nGramHitRate22_0","nGramHitRate33_0","nGramHitRate33_0",#"nGramHitRate55_0",
-                   #"q1Minusq2",
-                   "HillaryClinton",
-                   #"India",
                    "sentenceOverlap",
                    "q1Minusq2","q2Minusq1",
                    "nGramSkipHitRate21","nGramSkipHitRate31","nGramSkipHitRate41","nGramSkipHitRate42",
                    "nCommonWords","nWordsFirst","nWordsSecond","firstWordEqual"
                    )
+feature.names <- union(feature.names,word.comb.features)
 
 dtrain = xgb.DMatrix(as.matrix(train[s,feature.names,with=FALSE]), label=train$is_duplicate[s], missing=NA)
 dvalid = xgb.DMatrix(as.matrix(train[v,feature.names,with=FALSE]), label=train$is_duplicate[v], missing=NA)
@@ -324,7 +357,7 @@ xgb.importance(feature.names,xgboost.fit)
 train[23015]
 
 # save model and data
-save(list=c("xgboost.fit","feature.names","train","s","v","sample","word.count","words"), file="Quora Save Model")
+save(list=c("xgboost.fit","feature.names","train","s","v","sample"), file="Quora Save Model")
 load("Quora Save Model")
 
 # Mistakes made
