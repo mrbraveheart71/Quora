@@ -27,109 +27,6 @@ getWordWeights <- function(count,eps=5000,min_count=2) {
     {1 / (count + eps)}
 }
 
-setwd <- "C:/R-Studio/Quora"
-train  <- fread( "./train.csv")
-test  <- fread( "./test.csv")
-train$is_duplicate <- as.numeric(train$is_duplicate)
-
-getNGramMatch <- function(question1,question2,is_duplicate,n=2) {
-  t1 <- tokenize_ngrams(question1,n=n,n_min=n,simplify = TRUE)
-  t2 <- tokenize_ngrams(question2,n=n,n_min=n,simplify = TRUE)
-  sharedPhrases <- intersect(t1,t2)
-  if (length(sharedPhrases) > 0) {
-    ret <- cbind(sharedPhrases,is_duplicate)
-  } else {
-    ret <- NULL
-  }
-  ret
-}
-
-# Tuple generatio
-nTupleDiagnostics <- function(n=2) {
-  word.tuples <- mapply(getNGramMatch, train$question1,train$question2,train$is_duplicate,n,USE.NAMES=FALSE, SIMPLIFY=TRUE)
-  word.tuples <- list.clean(word.tuples, fun = is.null, recursive = FALSE)
-  word.tuples <- list.rbind(word.tuples)
-  word.tuples <- as.data.table(word.tuples)
-  word.tuples$is_duplicate <- as.numeric(word.tuples$is_duplicate)
-  setkeyv(word.tuples,c("sharedPhrases"))
-  tuple.mean.duplicate <- word.tuples[,j=list(prob=mean(is_duplicate),count=length(is_duplicate)),by=list(sharedPhrases)]
-  tuple.mean.duplicate  
-}
-
-nTuple1 <- nTupleDiagnostics(1)
-nTuple2 <- nTupleDiagnostics(2)
-nTuple3 <- nTupleDiagnostics(3)
-nTuple4 <- nTupleDiagnostics(4)
-
-save("nTuple1","nTuple2","nTuple3","nTuple4",file="N-Tuples Quora")
-load("N-Tuples Quora")
-
-# t <- t1[t1$count > 100 & t1$prob>0.80]
-# sum(t$count)
-# term <- 'your new year' # 112
-# s <- train[tolower(train$question1) %like% term & tolower(train$question2) %like% term]
-# s[1:5]
-# st <- test[tolower(test$question1) %like% term & tolower(test$question2) %like% term]
-# st[1:5]
-
-# Doodling here
-# word.tuples <- c(unlist(sapply(train$question1[1:10],function(x) tokenize_ngrams(x,n=2,n_min=2,simplify = FALSE)),use.names = FALSE),
-#                        unlist(sapply(train$question2[1:10],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE))
-# 
-# word.tuples <- table(c(unlist(sapply(train$question1,function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE),
-#                        unlist(sapply(train$question2,function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE)))
-# word.tuples.test <- table(c(unlist(sapply(test$question1[1:400000],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE),
-#                        unlist(sapply(test$question2[1:400000],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE)))
-# print("intersect")
-# length(intersect(names(word.tuples.test[word.tuples.test>5000]),names(word.tuples[word.tuples>5000])))
-# print("untion")
-# length(union(names(word.tuples.test[word.tuples.test>5000]),names(word.tuples[word.tuples>5000])))
-# 
-# word.triples <- table(c(unlist(sapply(train$question1,function(x) tokenize_ngrams(x,n=3,n_min=3)),use.names = FALSE),
-#                        unlist(sapply(train$question2,function(x) tokenize_ngrams(x,n=3,n_min=3)),use.names = FALSE)))
-
-# save("word.tuples","word.triples",file="Word Combinations Quora")
-# load("Word Combinations Quora")
-
-# word.tuples.most.common <- word.tuples[word.tuples>500]
-# word.comb.features <- as.vector(NULL)
-# for (tuple in 1:nrow(word.tuples.most.common)) {
-#     term <- names(word.tuples.most.common[tuple])
-#     print(paste0("Tuple : ",tuple, " of ",nrow(word.tuples.most.common)))
-#     print(paste0("The term is : ",term))  
-#     tuple.mean <- mean(train$is_duplicate[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))])
-#     tuple.sum <- sum(train$is_duplicate[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))])
-#     # add the feature
-#     if (tuple.mean > 0.7 & !is.nan(tuple.mean)) {
-#       feature.name <- paste0("feature_",paste0(unlist(strsplit(term," ")),collapse="_"))
-#       word.comb.features <- c(word.comb.features,feature.name)
-#       print(paste0("The mean is: ",tuple.mean," and the sum duplicates are ",tuple.sum))
-#       train[,eval(feature.name) := as.numeric(grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1)))]
-#     }
-# }
-
-#train[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))]
-
-#dfCorpus = Corpus(VectorSource(c(train$question1[-sample],train$question2[-sample])))
-#inspect(dfCorpus
-#myTdm <- TermDocumentMatrix(dfCorpus, control=list(tolower=TRUE))
-#word.count <- slam::row_sums(myTdm)
-#word.weight <- sapply(word.count, function(x) getWordWeights(x,5000,2))
-stopWords <- tm::stopwords(kind="en")
-
-wordVecSpace <- read.binary.vectors("GoogleNews-vectors-negative300.bin",nrows=100000)
-words.google <-  attr(wordVecSpace, which="dimnames")[[1]]
-
-TupleProb <- function(question1,question2,n=2,nTupleTable=NULL) {
-  t1 <- tokenize_ngrams(question1,n=n,n_min=n,simplify = TRUE)
-  t2 <- tokenize_ngrams(question2,n=n,n_min=n,simplify = TRUE)
-  sharedPhrases <- intersect(t1,t2)
-  idx <- which(nTupleTable$sharedPhrases %in% sharedPhrases)
-  ret.prob <-sum(nTupleTable$prob[idx] * nTupleTable$count[idx])/sum(nTupleTable$count[idx])
-  ret.count <-sum(nTupleTable$count[idx])
-  list(prob=ret.prob,count=ret.count)
-}
-
 nGramHitRate <- function(question1,question2,n=1,n_min=1,googleDictMin=500,stemming=TRUE) {
   if (stemming==TRUE) {
     question1 <- paste0(tokenize_word_stems(question1,language="en", simplify=TRUE),collapse=" ")
@@ -199,7 +96,7 @@ lastNWordsPunct <- function(question1,question2,n=2, googleDictMin=500) {
   # remove stop words
   t1 <- setdiff(t1,words.google[1:googleDictMin])
   t2 <- setdiff(t2,words.google[1:googleDictMin])
-
+  
   t1.start <- max(1,length(t1)-n+1)
   t2.start <- max(1,length(t2)-n+1)
   hitRate <- length(intersect(t1[t1.start:length(t1)],t2[t2.start:length(t2)]))
@@ -254,15 +151,135 @@ sharedWordsLastN <- function(question1,question2,n=1,stopWords) {
   } else 0
 }
 
+getNGramMatch <- function(question1,question2,is_duplicate,n=2) {
+  t1 <- tokenize_ngrams(question1,n=n,n_min=n,simplify = TRUE)
+  t2 <- tokenize_ngrams(question2,n=n,n_min=n,simplify = TRUE)
+  sharedPhrases <- intersect(t1,t2)
+  if (length(sharedPhrases) > 0) {
+    ret <- cbind(sharedPhrases,is_duplicate)
+  } else {
+    ret <- NULL
+  }
+  ret
+}
+
+generate_ngrams_batch <- function(documents_list, ngram_min, ngram_max, stopwords = character(), ngram_delim = " ") {
+  .Call('tokenizers_generate_ngrams_batch', PACKAGE = 'tokenizers', documents_list, ngram_min, ngram_max, stopwords, ngram_delim)
+}
+
+getNGramMatchPunct <- function(question1,question2,is_duplicate,n=2) {
+  t1 <- strsplit(tolower(question1), " ")
+  t2 <- strsplit(tolower(question2), " ")
+  t1 <- unlist(generate_ngrams_batch(t1,ngram_min =n,ngram_max=n))
+  t2 <- unlist(generate_ngrams_batch(t2,ngram_min =n,ngram_max=n))
+  sharedPhrases <- intersect(t1,t2)
+  if (length(sharedPhrases) > 0) {
+    ret <- cbind(sharedPhrases,is_duplicate)
+  } else {
+    ret <- NULL
+  }
+  ret
+}
+
+# Tuple generation
+nTupleDiagnostics <- function(n=2, train, tokenize=TRUE) {
+  if (tokenize == TRUE) {
+    word.tuples <- mapply(getNGramMatch, train$question1,train$question2,train$is_duplicate,n,USE.NAMES=FALSE, SIMPLIFY=TRUE)
+  } else {
+    word.tuples <- mapply(getNGramMatchPunct, train$question1,train$question2,train$is_duplicate,n,USE.NAMES=FALSE, SIMPLIFY=TRUE)
+  }
+  word.tuples <- list.clean(word.tuples, fun = is.null, recursive = FALSE)
+  word.tuples <- list.rbind(word.tuples)
+  word.tuples <- as.data.table(word.tuples)
+  word.tuples$is_duplicate <- as.numeric(word.tuples$is_duplicate)
+  setkeyv(word.tuples,c("sharedPhrases"))
+  tuple.mean.duplicate <- word.tuples[,j=list(prob=mean(is_duplicate),count=length(is_duplicate)),by=list(sharedPhrases)]
+  tuple.mean.duplicate  
+}
+
+TupleProbPunct <- function(question1,question2,n=2,nTupleTable=NULL) {
+  t1 <- strsplit(tolower(question1), " ")
+  t2 <- strsplit(tolower(question2), " ")
+  t1 <- unlist(generate_ngrams_batch(t1,ngram_min =n,ngram_max=n))
+  t2 <- unlist(generate_ngrams_batch(t2,ngram_min =n,ngram_max=n))
+  sharedPhrases <- intersect(t1,t2)
+  idx <- which(nTupleTable$sharedPhrases %in% sharedPhrases)
+  ret.prob <-sum(nTupleTable$prob[idx] * nTupleTable$count[idx])/sum(nTupleTable$count[idx])
+  ret.count <-sum(nTupleTable$count[idx])
+  list(prob=ret.prob,count=ret.count)
+}
+
+TupleProb <- function(question1,question2,n=2,nTupleTable=NULL) {
+  t1 <- tokenize_ngrams(question1,n=n,n_min=n,simplify = TRUE)
+  t2 <- tokenize_ngrams(question2,n=n,n_min=n,simplify = TRUE)
+  sharedPhrases <- intersect(t1,t2)
+  idx <- which(nTupleTable$sharedPhrases %in% sharedPhrases)
+  ret.prob <-sum(nTupleTable$prob[idx] * nTupleTable$count[idx])/sum(nTupleTable$count[idx])
+  ret.count <-sum(nTupleTable$count[idx])
+  list(prob=ret.prob,count=ret.count)
+}
+
+TupleProbMaxPunct <- function(question1,question2,n=2,nTupleTable=NULL,countMin=0) {
+  t1 <- strsplit(tolower(question1), " ")
+  t2 <- strsplit(tolower(question2), " ")
+  t1 <- unlist(generate_ngrams_batch(t1,ngram_min =n,ngram_max=n))
+  t2 <- unlist(generate_ngrams_batch(t2,ngram_min =n,ngram_max=n))
+  sharedPhrases <- intersect(t1,t2)
+  idx <- which(nTupleTable$sharedPhrases %in% sharedPhrases & nTupleTable$count > countMin)
+  ret.prob <-max(nTupleTable$prob[idx])
+  ret.count <-nTupleTable[idx][order(prob,decreasing = TRUE)]$count[1]
+  list(prob=ret.prob,count=ret.count)
+}
+
+TupleProbMax <- function(question1,question2,n=2,nTupleTable=NULL,countMin=0) {
+  t1 <- tokenize_ngrams(question1,n=n,n_min=n,simplify = TRUE)
+  t2 <- tokenize_ngrams(question2,n=n,n_min=n,simplify = TRUE)
+  sharedPhrases <- intersect(t1,t2)
+  idx <- which(nTupleTable$sharedPhrases %in% sharedPhrases & nTupleTable$count > countMin)
+  ret.prob <-max(nTupleTable$prob[idx])
+  ret.count <-nTupleTable[idx][order(prob,decreasing = TRUE)]$count[1]
+  list(prob=ret.prob,count=ret.count)
+}
+
+TupleProbTopN <- function(question1,question2,n=2,nTupleTable=NULL,countMin=0,TopN=1) {
+  t1 <- tokenize_ngrams(question1,n=n,n_min=n,simplify = TRUE)
+  t2 <- tokenize_ngrams(question2,n=n,n_min=n,simplify = TRUE)
+  sharedPhrases <- intersect(t1,t2)
+  idx <- which(nTupleTable$sharedPhrases %in% sharedPhrases & nTupleTable$count > countMin)
+  ret.prob <-nTupleTable[idx][order(prob,decreasing = TRUE)]$prob[TopN]
+  ret.count <-nTupleTable[idx][order(prob,decreasing = TRUE)]$count[TopN]
+  list(prob=ret.prob,count=ret.count)
+}
+
+setwd <- "C:/R-Studio/Quora"
+train  <- fread( "./train.csv")
+test  <- fread( "./test.csv")
+train$is_duplicate <- as.numeric(train$is_duplicate)
 
 # Create a corpus without the data
-sampleSize <- 10000
+sampleSize <- 100000
 sample <- sample(1:nrow(train),sampleSize)
+tupleSample <- setdiff(1:nrow(train),sample)
 print(length(sample))
+
+nTuple1 <- nTupleDiagnostics(1,train[tupleSample])
+nTuple2 <- nTupleDiagnostics(2,train[tupleSample])
+nTuple2Punct <- nTupleDiagnostics(2,train[tupleSample],tokenize=FALSE)
+nTuple3 <- nTupleDiagnostics(3,train[tupleSample])
+nTuple4 <- nTupleDiagnostics(4,train[tupleSample])
+nTuple5 <- nTupleDiagnostics(5,train[tupleSample])
+
+save("nTuple1","nTuple2","nTuple3","nTuple4","nTuple5","sample","tupleSample",file="N-Tuples Quora")
+load("N-Tuples Quora")
+
+stopWords <- tm::stopwords(kind="en")
+wordVecSpace <- read.binary.vectors("GoogleNews-vectors-negative300.bin",nrows=100000)
+words.google <-  attr(wordVecSpace, which="dimnames")[[1]]
+
+sample <- sample(sample,25000)
 
 j <- 1
 for (i in sample) {
-#for (i in 1:100) {
   if (j %% 10 == 0) print(j)
   
   train[i,nGramHitRate11 := nGramHitRate(question1,question2,1,1,500)]
@@ -284,9 +301,6 @@ for (i in sample) {
   train[i,nGramSkipHitRate41 := nGramSkipHitRate(question1,question2,4,1)]
   train[i,nGramSkipHitRate42 := nGramSkipHitRate(question1,question2,4,2)]
   
-  # train[i,lastWordCount1:=lastWordCount(question1)]
-  # train[i,lastWordCount2:=lastWordCount(question2)]
-
   # # # 
   t1 <- unlist(strsplit(tolower(train$question1[i]), " "))
   t2 <- unlist(strsplit(tolower(train$question2[i]), " "))
@@ -308,30 +322,7 @@ for (i in sample) {
   train[i, q1Minusq2 := length(setdiff(t1t,t2t))]
   train[i, q2Minusq1 := length(setdiff(t2t,t1t))]
 
-  j = j+1
-}
-
-samplePos <- intersect(which(train$is_duplicate==1),sample)
-sampleNeg <- intersect(which(train$is_duplicate==0),sample)
-positivePct <- length(samplePos)/length(sample)
-negativePct <- (1-positivePct)
-positiveTargetPct <- 0.165
-#positiveTargetPct <- 0.36
-negativeTargetPct <- 1- positiveTargetPct
-
-# Oversample the negatives, but keep track of them 
-add <- as.integer((negativeTargetPct*sampleSize - length(sampleNeg))/(1-negativeTargetPct))
-sampleNeg <- sample(sampleNeg, length(sampleNeg)+add, replace=TRUE)
-sampleNeg <- sampleNeg[order(sampleNeg)]
-
-s <- c( samplePos[1:(0.8*length(samplePos))], sampleNeg[1:(length(sampleNeg)*0.8)])
-v <- c( samplePos[(as.integer(0.8*length(samplePos)+1)):length(samplePos)],
-        sampleNeg[(as.integer(0.8*length(sampleNeg)+1)):length(sampleNeg)])
-
-#Additional columns
-j <- 1
-for (i in sample) {
-  print(j)
+  # Now N Tuples
   ret <- TupleProb(train$question1[i],train$question2[i],n=3,nTupleTable=nTuple3)
   train[i,Tuple3Prob:= ret$prob]
   train[i,Tuple3Count:= ret$count]
@@ -347,26 +338,86 @@ for (i in sample) {
   ret <- TupleProb(train$question1[i],train$question2[i],n=4,nTupleTable=nTuple4)
   train[i,Tuple4Prob:= ret$prob]
   train[i,Tuple4Count:= ret$count]
+
+  # Now N Tuples Max
+  ret <- TupleProbMax(train$question1[i],train$question2[i],n=3,nTupleTable=nTuple3)
+  train[i,Tuple3ProbMax:= ret$prob]
+  train[i,Tuple3CountMax:= ret$count]
+  
+  ret <- TupleProbMax(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2)
+  train[i,Tuple2ProbMax:= ret$prob]
+  train[i,Tuple2CountMax:= ret$count]
+  
+  ret <- TupleProbMax(train$question1[i],train$question2[i],n=1,nTupleTable=nTuple1)
+  train[i,Tuple1ProbMax:= ret$prob]
+  train[i,Tuple1CountMax:= ret$count]
+  
+  ret <- TupleProbMax(train$question1[i],train$question2[i],n=4,nTupleTable=nTuple4)
+  train[i,Tuple4ProbMax:= ret$prob]
+  train[i,Tuple4CountMax:= ret$count]
+ 
+  ret <- TupleProbMaxPunct(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2Punct)
+  train[i,Tuple2ProbPunctMax:= ret$prob]
+  train[i,Tuple2CountPunctMax:= ret$count]
+
+  ret <- TupleProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2,countMin = 0, TopN = 2 )
+  train[i,Tuple2ProbTop2:= ret$prob]
+  train[i,Tuple2CountTop2:= ret$count]
+  
+  j = j+1
+}
+
+samplePos <- intersect(which(train$is_duplicate==1),sample)
+sampleNeg <- intersect(which(train$is_duplicate==0),sample)
+positivePct <- length(samplePos)/length(sample)
+negativePct <- (1-positivePct)
+positiveTargetPct <- 0.165
+#positiveTargetPct <- 0.36
+negativeTargetPct <- 1- positiveTargetPct
+
+# Oversample the negatives, but keep track of them 
+add <- as.integer((negativeTargetPct*length(sample) - length(sampleNeg))/(1-negativeTargetPct))
+sampleNeg <- sample(sampleNeg, length(sampleNeg)+add, replace=TRUE)
+sampleNeg <- sampleNeg[order(sampleNeg)]
+
+s <- c( samplePos[1:(0.8*length(samplePos))], sampleNeg[1:(length(sampleNeg)*0.8)])
+v <- c( samplePos[(as.integer(0.8*length(samplePos)+1)):length(samplePos)],
+        sampleNeg[(as.integer(0.8*length(sampleNeg)+1)):length(sampleNeg)])
+
+#Additional columns
+j <- 1
+for (i in sample) {
+  print(j)
+
+  ret <- TupleProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2,countMin = 0, TopN = 3 )
+  train[i,Tuple2ProbTop3:= ret$prob]
+  train[i,Tuple2CountTop3:= ret$count]
   
   j = j+1
 }
 
 xgb_params = list(seed = 0,subsample = 1,
-  eta = 0.1,max_depth =4,num_parallel_tree = 1,min_child_weight = 2,
+  eta = 0.1,max_depth =3,num_parallel_tree = 1,min_child_weight = 2,
   objective='binary:logistic',eval_metric = 'logloss')
 
-feature.names <- c("nGramHitRate",
+feature.names <- c(#"nGramHitRate",
                    "nGramHitRate11","nGramHitRate22","nGramHitRate33",
                    "nGramHitRate11_0","nGramHitRate22_0","nGramHitRate33_0","nGramHitRate33_0",
                    "sentenceOverlap",
                    "q1Minusq2","q2Minusq1",
                    "nGramSkipHitRate21","nGramSkipHitRate31","nGramSkipHitRate41","nGramSkipHitRate42",
-                   "nCommonWords","nWordsFirst","nWordsSecond","firstWordEqual",
+                   "nCommonWords",
+                   "nWordsFirst","nWordsSecond","firstWordEqual",
                    "Tuple3Prob","Tuple3Count","Tuple4Prob","Tuple4Count",
-                   "Tuple2Prob","Tuple2Count","Tuple1Prob","Tuple1Count"
-                   )
+                   "Tuple2Prob","Tuple2Count","Tuple1Prob","Tuple1Count",
+                   "Tuple2ProbPunctMax","Tuple2CountPunctMax",
+                   "Tuple2ProbTop2","Tuple2CountTop2","Tuple2ProbTop3","Tuple2CountTop3",
+                   "Tuple3ProbMax","Tuple3CountMax","Tuple4ProbMax","Tuple4CountMax",
+                   "Tuple2ProbMax","Tuple2CountMax","Tuple1ProbMax","Tuple1CountMax",
+                   "Tuple3ProbMaxMin10","Tuple3CountMaxMin10","Tuple4ProbMaxMin10","Tuple4CountMaxMin10",
+                   "Tuple2ProbMaxMin10","Tuple2CountMaxMin10","Tuple1ProbMaxMin10","Tuple1CountMaxMin10"
+)
 #feature.names <- union(feature.names,word.comb.features)
-
 dtrain = xgb.DMatrix(as.matrix(train[s,feature.names,with=FALSE]), label=train$is_duplicate[s], missing=NA)
 dvalid = xgb.DMatrix(as.matrix(train[v,feature.names,with=FALSE]), label=train$is_duplicate[v], missing=NA)
 dall = xgb.DMatrix(as.matrix(train[sample,feature.names,with=FALSE]), label=train$is_duplicate[sample], missing=NA)
@@ -378,16 +429,13 @@ xgboost.fit <- xgb.train (data=dtrain,xgb_params,missing=NA,early_stopping_round
 train$pred[sample] <- predict(xgboost.fit,dall)
 xgb.importance(feature.names,xgboost.fit)
 
-# check 23015, how to improve
-train[23015]
-
 # save model and data
 save(list=c("xgboost.fit","feature.names","train","s","v","sample"), file="Quora Save Model")
 load("Quora Save Model")
 
 # Mistakes made
 train.final <- train[sample]
-train.final[abs(train.final$pred - train.final$is_duplicate) > 0.6][1:10]
+train.final[abs(train.final$pred - train.final$is_duplicate) > 0.8][10:20]
 t <- train.final[abs(train.final$pred - train.final$is_duplicate) < 0.1]
 t[t$is_duplicate==1]
 
@@ -410,3 +458,55 @@ train[which(train$question1 %like% 'delivary')]
 write.table(c(train$question1[1:10000],train$question2[1:10000]),"Question Text File.txt",quote=FALSE,col.names=FALSE,row.names=FALSE)
 vs <- train_word2vec("Question Text File.txt",output_file="vectors.bin",vectors=50,force=TRUE)
 closest_to(vs,"good",n=5)
+
+# t <- t1[t1$count > 100 & t1$prob>0.80]
+# sum(t$count)
+# term <- 'your new year' # 112
+# s <- train[tolower(train$question1) %like% term & tolower(train$question2) %like% term]
+# s[1:5]
+# st <- test[tolower(test$question1) %like% term & tolower(test$question2) %like% term]
+# st[1:5]
+
+# Doodling here
+# word.tuples <- c(unlist(sapply(train$question1[1:10],function(x) tokenize_ngrams(x,n=2,n_min=2,simplify = FALSE)),use.names = FALSE),
+#                        unlist(sapply(train$question2[1:10],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE))
+# 
+# word.tuples <- table(c(unlist(sapply(train$question1,function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE),
+#                        unlist(sapply(train$question2,function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE)))
+# word.tuples.test <- table(c(unlist(sapply(test$question1[1:400000],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE),
+#                        unlist(sapply(test$question2[1:400000],function(x) tokenize_ngrams(x,n=2,n_min=2)),use.names = FALSE)))
+# print("intersect")
+# length(intersect(names(word.tuples.test[word.tuples.test>5000]),names(word.tuples[word.tuples>5000])))
+# print("untion")
+# length(union(names(word.tuples.test[word.tuples.test>5000]),names(word.tuples[word.tuples>5000])))
+# 
+# word.triples <- table(c(unlist(sapply(train$question1,function(x) tokenize_ngrams(x,n=3,n_min=3)),use.names = FALSE),
+#                        unlist(sapply(train$question2,function(x) tokenize_ngrams(x,n=3,n_min=3)),use.names = FALSE)))
+
+# save("word.tuples","word.triples",file="Word Combinations Quora")
+# load("Word Combinations Quora")
+
+# word.tuples.most.common <- word.tuples[word.tuples>500]
+# word.comb.features <- as.vector(NULL)
+# for (tuple in 1:nrow(word.tuples.most.common)) {
+#     term <- names(word.tuples.most.common[tuple])
+#     print(paste0("Tuple : ",tuple, " of ",nrow(word.tuples.most.common)))
+#     print(paste0("The term is : ",term))  
+#     tuple.mean <- mean(train$is_duplicate[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))])
+#     tuple.sum <- sum(train$is_duplicate[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))])
+#     # add the feature
+#     if (tuple.mean > 0.7 & !is.nan(tuple.mean)) {
+#       feature.name <- paste0("feature_",paste0(unlist(strsplit(term," ")),collapse="_"))
+#       word.comb.features <- c(word.comb.features,feature.name)
+#       print(paste0("The mean is: ",tuple.mean," and the sum duplicates are ",tuple.sum))
+#       train[,eval(feature.name) := as.numeric(grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1)))]
+#     }
+# }
+
+#train[grepl(term,tolower(train$question2)) & grepl(term,tolower(train$question1))]
+
+#dfCorpus = Corpus(VectorSource(c(train$question1[-sample],train$question2[-sample])))
+#inspect(dfCorpus
+#myTdm <- TermDocumentMatrix(dfCorpus, control=list(tolower=TRUE))
+#word.count <- slam::row_sums(myTdm)
+#word.weight <- sapply(word.count, function(x) getWordWeights(x,5000,2))
