@@ -45,6 +45,7 @@ nWordMatch2 <- nWordDiagnostics(train[tupleSample])
 nWordMatch2Stem <- nWordDiagnostics(train[tupleSample],match=TRUE,stemming=TRUE)
 
 nWordMiss2 <- nWordDiagnostics(train[tupleSample],2,match=FALSE)
+nWordMiss2Stem <- nWordDiagnostics(train[tupleSample],2,match=FALSE,stemming=TRUE)
 nWordMatch3 <- nWordDiagnostics(train[tupleSample],n=3)
 nTuple3 <- nTupleDiagnostics(3,train[tupleSample])
 nTuple4 <- nTupleDiagnostics(4,train[tupleSample])
@@ -55,7 +56,8 @@ nTuple5 <- nTupleDiagnostics(5,train[tupleSample])
 # proc.time() - ptm
 
 save("nTuple1","nTuple2","nTuple2Miss","nTuple3","nTuple4","nTuple5","nTuple1Miss","nTuple2Miss",
-     "sample","tupleSample","nWordMatch2","nWordMatch2Stem","nWordMatch3","nWordMiss2",file="N-Tuples Quora")
+     "sample","tupleSample","nWordMatch2","nWordMatch2Stem","nWordMatch3","nWordMiss2","nWordMiss2Stem",
+     file="N-Tuples Quora")
 
 sample <- sample(sample,25000)
 
@@ -177,7 +179,7 @@ for (i in sample) {
                            nTupleTable=nWordMatch2Stem,countMin = 0, TopN = 1, decreasing=TRUE, stemming=TRUE )
   train[i,WordMatch2ProbTop1Stem:= ret$prob]
   train[i,WordMatch2CountTop1Stem:= ret$count]
-  
+
   j = j+1
 }
 
@@ -203,37 +205,43 @@ j <- 1
 for (i in sample) {
   print(j)
 
-  ret <- WordMatchProbTopN(train$question1[i],train$question2[i],n=2,
-                           nTupleTable=nWordMatch2Stem,countMin = 0, TopN = 1, decreasing=TRUE, stemming=TRUE )
-  train[i,WordMatch2ProbTop1Stem:= ret$prob]
-  train[i,WordMatch2CountTop1Stem:= ret$count]
+  ret <- WordMissProbTopN(train$question1[i],train$question2[i],n=2,
+                           nTupleTable=nWordMiss2,countMin = 0, TopN = 3, decreasing=FALSE, stemming=FALSE )
+  train[i,WordMiss2ProbTop3:= ret$prob]
+  train[i,WordMiss2CountTop3:= ret$count]
   
   j = j+1
 }
 
 feature.names <- c("nGramHitRate",
-                   "nGramHitRate11","nGramHitRate22","nGramHitRate33",
-                   "nGramHitRate11_0","nGramHitRate22_0","nGramHitRate33_0","nGramHitRate33_0",
-                   "nGramSkipHitRate21","nGramSkipHitRate31",
-                   "nCommonWords",
-                   "nWordsFirst","nWordsSecond",
-                   "Tuple1ProbTop1Min","Tuple1CountTop1Min","Tuple2ProbTop1Min","Tuple2CountTop1Min",
+                   #"nGramHitRate11","nGramHitRate22","nGramHitRate33",
+                   "nGramHitRate11_0","nGramHitRate22_0",#"nGramHitRate33_0","nGramHitRate33_0",
+                   #"nGramSkipHitRate21","nGramSkipHitRate31",
+                   #"nCommonWords",
+                   #"nWordsFirst","nWordsSecond",
+                   "Tuple1ProbTop1Min","Tuple1CountTop1Min",
+                   "Tuple2ProbTop1Min","Tuple2CountTop1Min",
                    "WordMatch2ProbTop1","WordMatch2CountTop1",
                    "WordMatch3ProbTop1","WordMatch3CountTop1",
+                   #"WordMatch3ProbTop1Min100","WordMatch3CountTop1Min100",
                    "WordMatch2ProbTop1Stem","WordMatch2CountTop1Stem",
-                   "WordMiss2ProbTop1","WordMiss2CountTop1","WordMiss2ProbTop2","WordMiss2CountTop2",
+                   "WordMiss2ProbTop1","WordMiss2CountTop1",
+                   "WordMiss2ProbTop2","WordMiss2CountTop2",
+                   #"WordMiss2ProbTop3","WordMiss2CountTop3",
                    "WordMiss2ProbTop1Max","WordMiss2CountTop1Max",
-                   "Tuple2ProbPunctMax","Tuple2CountPunctMax",
-                   "Tuple2ProbTop2","Tuple2CountTop2","Tuple2ProbTop3","Tuple2CountTop3",
-                   "Tuple2ProbMax","Tuple2CountMax","Tuple1ProbMax","Tuple1CountMax",
-                   "Tuple2ProbMaxMin10","Tuple2CountMaxMin10","Tuple1ProbMaxMin10","Tuple1CountMaxMin10"
+                   #"WordMiss2ProbTop1Stem","WordMiss2CountTop1Stem",
+                   #"Tuple2ProbPunctMax","Tuple2CountPunctMax",
+                   #"Tuple2ProbTop2","Tuple2CountTop2","Tuple2ProbTop3","Tuple2CountTop3",
+                   #"Tuple2ProbMax","Tuple2CountMax",
+                   "Tuple1ProbMax","Tuple1CountMax"
+                   #"Tuple2ProbMaxMin10","Tuple2CountMaxMin10","Tuple1ProbMaxMin10","Tuple1CountMaxMin10"
 )
 
 col.names <- c("id","qid1","qid2","question1","question2","is_duplicate")
 col.names <- c(col.names,feature.names)
 #train <- train[,col.names,with=FALSE]
 
-xgb_params = list(seed = 0,subsample = 0.8,eta = 0.1,max_depth =3,num_parallel_tree = 1,min_child_weight = 2,
+xgb_params = list(seed = 0,subsample = 0.7,eta = 0.1,max_depth =4,num_parallel_tree = 1,min_child_weight = 2,
                   objective='binary:logistic',eval_metric = 'logloss')
 
 dtrain = xgb.DMatrix(as.matrix(train[s,feature.names,with=FALSE]), label=train$is_duplicate[s], missing=NA)
