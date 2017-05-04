@@ -22,167 +22,25 @@ train  <- fread( "./train.csv")
 test  <- fread( "./test.csv")
 train$is_duplicate <- as.numeric(train$is_duplicate)
 
-# Create a corpus without the data
-sampleSize <- 100000
+stopWords <- tm::stopwords(kind="en")
+# wordVecSpace <- read.binary.vectors("GoogleNews-vectors-negative300.bin",nrows=500000)
+# words.google <-  attr(wordVecSpace, which="dimnames")[[1]]
+# save("words.google",file="Quora Google Dictionary")
+load("Quora Google Dictionary")
+load("Quora Save Model")
+
+trainNGramFileName <- "Quora NGrams Train"
+sampleSize <- 50000
 sample <- sample(1:nrow(train),sampleSize)
 tupleSample <- setdiff(1:nrow(train),sample)
-print(length(sample))
+#tupleSample <- 1:1000
+calcAndSaveNGramTables(tupleSample, fileName = trainNGramFileName)
 
-load("Quora Save Model")
-load("N-Tuples Quora")
+load(trainNGramFileName)
+#sample <- sample(sample,50000)
 
-stopWords <- tm::stopwords(kind="en")
-wordVecSpace <- read.binary.vectors("GoogleNews-vectors-negative300.bin",nrows=100000)
-words.google <-  attr(wordVecSpace, which="dimnames")[[1]]
-
-nTuple1 <- nTupleDiagnostics(1,train[tupleSample])
-nTuple1Miss <- nTupleDiagnostics(1,train[tupleSample],tokenize=TRUE,match=FALSE)
-nTuple2 <- nTupleDiagnostics(2,train[tupleSample])
-nTuple2Punct <- nTupleDiagnostics(2,train[tupleSample],tokenize=FALSE)
-nTuple2Miss <- nTupleDiagnostics(2,train[tupleSample],tokenize=TRUE,match=FALSE)
-
-nWordMatch2 <- nWordDiagnostics(train[tupleSample])
-nWordMatch2Stem <- nWordDiagnostics(train[tupleSample],match=TRUE,stemming=TRUE)
-
-nWordMiss2 <- nWordDiagnostics(train[tupleSample],2,match=FALSE)
-nWordMiss2Stem <- nWordDiagnostics(train[tupleSample],2,match=FALSE,stemming=TRUE)
-nWordMatch3 <- nWordDiagnostics(train[tupleSample],n=3)
-nTuple3 <- nTupleDiagnostics(3,train[tupleSample])
-nTuple4 <- nTupleDiagnostics(4,train[tupleSample])
-nTuple5 <- nTupleDiagnostics(5,train[tupleSample])
-
-# ptm <- proc.time()
-# nWordMiss2 <- nWordDiagnostics(train[1:210],2,match=FALSE)
-# proc.time() - ptm
-
-save("nTuple1","nTuple2","nTuple2Miss","nTuple3","nTuple4","nTuple5","nTuple1Miss","nTuple2Miss",
-     "sample","tupleSample","nWordMatch2","nWordMatch2Stem","nWordMatch3","nWordMiss2","nWordMiss2Stem",
-     file="N-Tuples Quora")
-
-sample <- sample(sample,25000)
-
-j <- 1
-for (i in sample) {
-  if (j %% 10 == 0) print(j)
+train <- traintestAddColumn(sample,train)
   
-  train[i,nGramHitRate11 := nGramHitRate(question1,question2,1,1,500)]
-  train[i,nGramHitRate22 := nGramHitRate(question1,question2,2,2,500)]
-  train[i,nGramHitRate33 := nGramHitRate(question1,question2,3,3,500)]
-
-  train[i,nGramHitRate11_0 := nGramHitRate(question1,question2,1,1,0)]
-  train[i,nGramHitRate22_0 := nGramHitRate(question1,question2,2,2,0)]
-  train[i,nGramHitRate33_0 := nGramHitRate(question1,question2,3,3,0)]
-  
-  train[i,sentenceOverlap:= sentenceOverlap(question1,question2,20,"")]
-  
-  ret <- TupleProb(train$question1[i],train$question2[i],n=3,nTupleTable=nTuple3)
-  train[i,Tuple3Prob:= ret$prob]
-  train[i,Tuple3Count:= ret$count]
-  
-  train[i,nGramSkipHitRate21 := nGramSkipHitRate(question1,question2,2,1)]
-  train[i,nGramSkipHitRate31 := nGramSkipHitRate(question1,question2,3,1)]
-  train[i,nGramSkipHitRate41 := nGramSkipHitRate(question1,question2,4,1)]
-  train[i,nGramSkipHitRate42 := nGramSkipHitRate(question1,question2,4,2)]
-  
-  # # # 
-  t1 <- unlist(strsplit(tolower(train$question1[i]), " "))
-  t2 <- unlist(strsplit(tolower(train$question2[i]), " "))
-  train[i,firstWordEqual := ifelse(t1[1]==t2[1],1,0)]
-  # remove stop words
-  t1 <- setdiff(t1,stopWords)
-  t2 <- setdiff(t2,stopWords)
-  sharedWords <- intersect(t1,t2)
-  bothLengths <- length(t1)+length(t2)
-  train[i,nGramHitRate := 2*length(sharedWords)/bothLengths]
-  train[i,nGramHitRate := ifelse(is.infinite(nGramHitRate),0,nGramHitRate)]
-  
-  train[i,nCommonWords :=length(unique(sharedWords))]
-  train[i,nWordsFirst := length(unique(t1))]
-  train[i,nWordsSecond := length(unique(t2))]
-  
-  t1t <- unlist(tokenize_ngrams(train$question1[i],n=1, n_min=1))
-  t2t <- unlist(tokenize_ngrams(train$question2[i],n=1, n_min=1))
-  train[i, q1Minusq2 := length(setdiff(t1t,t2t))]
-  train[i, q2Minusq1 := length(setdiff(t2t,t1t))]
-
-  # Now N Tuples
-  # ret <- TupleProb(train$question1[i],train$question2[i],n=3,nTupleTable=nTuple3)
-  # train[i,Tuple3Prob:= ret$prob]
-  # train[i,Tuple3Count:= ret$count]
-  # 
-  # ret <- TupleProb(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2)
-  # train[i,Tuple2Prob:= ret$prob]
-  # train[i,Tuple2Count:= ret$count]
-  # 
-  # ret <- TupleProb(train$question1[i],train$question2[i],n=1,nTupleTable=nTuple1)
-  # train[i,Tuple1Prob:= ret$prob]
-  # train[i,Tuple1Count:= ret$count]
-  # 
-  # ret <- TupleProb(train$question1[i],train$question2[i],n=4,nTupleTable=nTuple4)
-  # train[i,Tuple4Prob:= ret$prob]
-  # train[i,Tuple4Count:= ret$count]
-
-  # Now N Tuples Max
-  ret <- TupleProbMax(train$question1[i],train$question2[i],n=3,nTupleTable=nTuple3)
-  train[i,Tuple3ProbMax:= ret$prob]
-  train[i,Tuple3CountMax:= ret$count]
-  
-  ret <- TupleProbMax(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2)
-  train[i,Tuple2ProbMax:= ret$prob]
-  train[i,Tuple2CountMax:= ret$count]
-  
-  ret <- TupleProbMax(train$question1[i],train$question2[i],n=1,nTupleTable=nTuple1)
-  train[i,Tuple1ProbMax:= ret$prob]
-  train[i,Tuple1CountMax:= ret$count]
-  
-  ret <- TupleProbMax(train$question1[i],train$question2[i],n=4,nTupleTable=nTuple4)
-  train[i,Tuple4ProbMax:= ret$prob]
-  train[i,Tuple4CountMax:= ret$count]
- 
-  ret <- TupleProbMaxPunct(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2Punct)
-  train[i,Tuple2ProbPunctMax:= ret$prob]
-  train[i,Tuple2CountPunctMax:= ret$count]
-
-  ret <- TupleProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2,countMin = 0, TopN = 2 )
-  train[i,Tuple2ProbTop2:= ret$prob]
-  train[i,Tuple2CountTop2:= ret$count]
-  
-  ret <- TupleProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2,countMin = 0, TopN = 3 )
-  train[i,Tuple2ProbTop3:= ret$prob]
-  train[i,Tuple2CountTop3:= ret$count]
-
-  ret <- TupleProbTopNMiss(train$question1[i],train$question2[i],n=1,nTupleTable=nTuple1Miss,countMin = 0, TopN = 1, decreasing=FALSE )
-  train[i,Tuple1ProbTop1Min:= ret$prob]
-  train[i,Tuple1CountTop1Min:= ret$count]
-  
-  ret <- TupleProbTopNMiss(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2Miss,countMin = 0, TopN = 1, decreasing=FALSE )
-  train[i,Tuple2ProbTop1Min:= ret$prob]
-  train[i,Tuple2CountTop1Min:= ret$count]
-
-  ret <- WordMatchProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nWordMatch2,countMin = 0, TopN = 1, decreasing=TRUE )
-  train[i,WordMatch2ProbTop1:= ret$prob]
-  train[i,WordMatch2CountTop1:= ret$count]
-  
-  ret <- WordMissProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nWordMiss2,countMin = 0, TopN = 1, decreasing=FALSE )
-  train[i,WordMiss2ProbTop1:= ret$prob]
-  train[i,WordMiss2CountTop1:= ret$count]
-
-  ret <- WordMissProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nWordMiss2,countMin = 0, TopN = 2, decreasing=FALSE )
-  train[i,WordMiss2ProbTop2:= ret$prob]
-  train[i,WordMiss2CountTop2:= ret$count]
-  
-  ret <- WordMissProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nWordMiss2,countMin = 0, TopN = 1, decreasing=TRUE )
-  train[i,WordMiss2ProbTop1Max:= ret$prob]
-  train[i,WordMiss2CountTop1Max:= ret$count]
-
-  ret <- WordMatchProbTopN(train$question1[i],train$question2[i],n=2,
-                           nTupleTable=nWordMatch2Stem,countMin = 0, TopN = 1, decreasing=TRUE, stemming=TRUE )
-  train[i,WordMatch2ProbTop1Stem:= ret$prob]
-  train[i,WordMatch2CountTop1Stem:= ret$count]
-
-  j = j+1
-}
-
 samplePos <- intersect(which(train$is_duplicate==1),sample)
 sampleNeg <- intersect(which(train$is_duplicate==0),sample)
 positivePct <- length(samplePos)/length(sample)
@@ -204,44 +62,35 @@ v <- c( samplePos[(as.integer(0.8*length(samplePos)+1)):length(samplePos)],
 j <- 1
 for (i in sample) {
   print(j)
-
-  ret <- WordMissProbTopN(train$question1[i],train$question2[i],n=2,
-                           nTupleTable=nWordMiss2,countMin = 0, TopN = 3, decreasing=FALSE, stemming=FALSE )
-  train[i,WordMiss2ProbTop3:= ret$prob]
-  train[i,WordMiss2CountTop3:= ret$count]
+  
+  ret <- WordMissProbTopNCheck(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2Miss,TopN = 7, decreasing=FALSE )
+  train[i,WordMiss2ProbTop1Min100:= ret$prob]
+  train[i,WordMiss2CountTop1Min100:= ret$count]
   
   j = j+1
 }
+idx <- which(!is.na(train$WordMiss2ProbTop1Min100[sample[1:100]]))
+cor(train$WordMiss2ProbTop1Min100[sample[idx]],train$residual[sample[idx]])
 
 feature.names <- c("nGramHitRate",
-                   #"nGramHitRate11","nGramHitRate22","nGramHitRate33",
-                   "nGramHitRate11_0","nGramHitRate22_0",#"nGramHitRate33_0","nGramHitRate33_0",
-                   #"nGramSkipHitRate21","nGramSkipHitRate31",
-                   #"nCommonWords",
-                   #"nWordsFirst","nWordsSecond",
+                   "nGramHitRate11_0","nGramHitRate22_0",
                    "Tuple1ProbTop1Min","Tuple1CountTop1Min",
                    "Tuple2ProbTop1Min","Tuple2CountTop1Min",
                    "WordMatch2ProbTop1","WordMatch2CountTop1",
                    "WordMatch3ProbTop1","WordMatch3CountTop1",
-                   #"WordMatch3ProbTop1Min100","WordMatch3CountTop1Min100",
                    "WordMatch2ProbTop1Stem","WordMatch2CountTop1Stem",
+                   #"WordMiss2ProbTop1Min100","WordMiss2CountTop1Min100",
                    "WordMiss2ProbTop1","WordMiss2CountTop1",
                    "WordMiss2ProbTop2","WordMiss2CountTop2",
-                   #"WordMiss2ProbTop3","WordMiss2CountTop3",
                    "WordMiss2ProbTop1Max","WordMiss2CountTop1Max",
                    #"WordMiss2ProbTop1Stem","WordMiss2CountTop1Stem",
-                   #"Tuple2ProbPunctMax","Tuple2CountPunctMax",
-                   #"Tuple2ProbTop2","Tuple2CountTop2","Tuple2ProbTop3","Tuple2CountTop3",
-                   #"Tuple2ProbMax","Tuple2CountMax",
-                   "Tuple1ProbMax","Tuple1CountMax"
-                   #"Tuple2ProbMaxMin10","Tuple2CountMaxMin10","Tuple1ProbMaxMin10","Tuple1CountMaxMin10"
-)
+                   "Tuple1ProbMax","Tuple1CountMax")
 
 col.names <- c("id","qid1","qid2","question1","question2","is_duplicate")
 col.names <- c(col.names,feature.names)
 #train <- train[,col.names,with=FALSE]
 
-xgb_params = list(seed = 0,subsample = 0.7,eta = 0.1,max_depth =4,num_parallel_tree = 1,min_child_weight = 2,
+xgb_params = list(seed = 0,subsample = 0.8,eta = 0.1,max_depth =3,num_parallel_tree = 1,min_child_weight = 2,
                   objective='binary:logistic',eval_metric = 'logloss')
 
 dtrain = xgb.DMatrix(as.matrix(train[s,feature.names,with=FALSE]), label=train$is_duplicate[s], missing=NA)
@@ -257,11 +106,12 @@ xgb.importance(feature.names,xgboost.fit)
 
 # save model and data
 save(list=c("xgboost.fit","feature.names","train","s","v","sample"), file="Quora Save Model")
+
 load("Quora Save Model")
 
 # Mistakes made
 train.final <- train[sample]
-train.final[abs(train.final$pred - train.final$is_duplicate) > 0.90][20:30]
+train.final[abs(train.final$pred - train.final$is_duplicate) > 0.70][20:30]
 t <- train.final[abs(train.final$pred - train.final$is_duplicate) < 0.1]
 t[t$is_duplicate==1]
 
