@@ -63,14 +63,14 @@ j <- 1
 for (i in sample) {
   print(j)
   
-  ret <- WordMissProbTopNCheck(train$question1[i],train$question2[i],n=2,nTupleTable=nTuple2Miss,TopN = 7, decreasing=FALSE )
-  train[i,WordMiss2ProbTop1Min100:= ret$prob]
-  train[i,WordMiss2CountTop1Min100:= ret$count]
+  ret <- WordMissProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nWordMiss2,countMin = 3, TopN = 1, decreasing=FALSE )
+  train[i,WordMiss2ProbTop1Min3:= ret$prob]
+  train[i,WordMiss2CountTop1Min3:= ret$count]
   
   j = j+1
 }
-idx <- which(!is.na(train$WordMiss2ProbTop1Min100[sample[1:100]]))
-cor(train$WordMiss2ProbTop1Min100[sample[idx]],train$residual[sample[idx]])
+idx <- which(!is.na(train$WordMiss2ProbTop1[sample]))
+cor(train$WordMiss2ProbTop1[sample[idx]],train$is_duplicate[sample[idx]])
 
 feature.names <- c("nGramHitRate",
                    "nGramHitRate11_0","nGramHitRate22_0",
@@ -79,7 +79,7 @@ feature.names <- c("nGramHitRate",
                    "WordMatch2ProbTop1","WordMatch2CountTop1",
                    "WordMatch3ProbTop1","WordMatch3CountTop1",
                    "WordMatch2ProbTop1Stem","WordMatch2CountTop1Stem",
-                   #"WordMiss2ProbTop1Min100","WordMiss2CountTop1Min100",
+                   "WordMiss2ProbTop1Min3","WordMiss2CountTop1Min3",
                    "WordMiss2ProbTop1","WordMiss2CountTop1",
                    "WordMiss2ProbTop2","WordMiss2CountTop2",
                    "WordMiss2ProbTop1Max","WordMiss2CountTop1Max",
@@ -116,24 +116,27 @@ t <- train.final[abs(train.final$pred - train.final$is_duplicate) < 0.1]
 t[t$is_duplicate==1]
 
 
+idx <- which(train$WordMiss2CountTop1>4)
+cor(train$WordMiss2ProbTop1[idx], train$is_duplicate[idx])
+
 # Read wrod2vec files
-library(wordVectors)
-wordVecSpace <- read.binary.vectors("GoogleNews-vectors-negative300.bin",nrows=200000)
-words <-  attr(wordVecSpace, which="dimnames")[[1]]
-word.intersect <- intersect(names(word.count),tolower(words)) 
-length(word.intersect)
-print(paste0("coverage is ",sum(word.count[word.intersect])/sum(word.count)*100))
-
-length(setdiff(names(word.count),tolower(words)))
-
-setdiff(names(word.count),tolower(words))[9000:10000]
-words[which(stringdist("delivary",words)==1)[1]]
-train[which(train$question1 %like% 'delivary')]
+# library(wordVectors)
+# wordVecSpace <- read.binary.vectors("GoogleNews-vectors-negative300.bin",nrows=200000)
+# words <-  attr(wordVecSpace, which="dimnames")[[1]]
+# word.intersect <- intersect(names(word.count),tolower(words)) 
+# length(word.intersect)
+# print(paste0("coverage is ",sum(word.count[word.intersect])/sum(word.count)*100))
+# 
+# length(setdiff(names(word.count),tolower(words)))
+# 
+# setdiff(names(word.count),tolower(words))[9000:10000]
+# words[which(stringdist("delivary",words)==1)[1]]
+# train[which(train$question1 %like% 'delivary')]
 
 # Train an own model
-write.table(c(train$question1[1:10000],train$question2[1:10000]),"Question Text File.txt",quote=FALSE,col.names=FALSE,row.names=FALSE)
-vs <- train_word2vec("Question Text File.txt",output_file="vectors.bin",vectors=50,force=TRUE)
-closest_to(vs,"good",n=5)
+# write.table(c(train$question1[1:10000],train$question2[1:10000]),"Question Text File.txt",quote=FALSE,col.names=FALSE,row.names=FALSE)
+# vs <- train_word2vec("Question Text File.txt",output_file="vectors.bin",vectors=50,force=TRUE)
+# closest_to(vs,"good",n=5)
 
 # t <- t1[t1$count > 100 & t1$prob>0.80]
 # sum(t$count)

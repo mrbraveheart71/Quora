@@ -234,6 +234,55 @@ getNWordMiss <- function(question1,question2,is_duplicate,n=2, stemming=FALSE,st
   ret
 }
 
+WordCrossProbTopN <- function(question1,question2,nTupleTable=NULL,countMin=0,TopN=1, decreasing=TRUE, stopwords=stopWords) {
+  t1 <- tokenize_ngrams(question1,n=1,n_min=1,simplify = TRUE, stopwords = stopwords)
+  t2 <- tokenize_ngrams(question2,n=1,n_min=1,simplify = TRUE, stopwords = stopwords)
+
+  sharedWords <- intersect(t1,t2)
+  if (length(sharedWords) > (n-1)) {
+    sharedPhrases <- t(combn(sharedWords,n))
+    sharedPhrases <- t(apply(sharedPhrases,1,function(x) x[order(x)]))
+    sharedPhrases <- apply(sharedPhrases,1,function(x) paste0(x,collapse=" "))
+    matches <- nTupleTable[sharedPhrases]
+    matches <- matches[!is.na(matches$count)]
+    matches <- matches[order(prob,decreasing=decreasing)]
+    #idx <- which(nTupleTable$sharedPhrases %in% sharedPhrases & nTupleTable$count > countMin)
+    ret.prob <-matches[matches$count > countMin]$prob[TopN]
+    ret.count <-matches[matches$count > countMin]$count[TopN]
+  } else {
+    ret.prob <- NA 
+    ret.count <- NA 
+  }
+  list(prob=ret.prob,count=ret.count)
+}
+
+
+getCrossMatch <- function(question1,question2,is_duplicate,stopwords) {
+  t1 <- tokenize_ngrams(question1,n=1,n_min=1,simplify = TRUE, stopwords = stopwords)
+  t2 <- tokenize_ngrams(question2,n=1,n_min=1,simplify = TRUE, stopwords = stopwords)
+  sharedWords <- expand.grid(t1,t2)
+  if (length(sharedWords) > 0) {
+    sharedWords <- t(apply(sharedWords,1,function(x) x[order(x)]))
+    sharedWords <- apply(sharedWords,1,function(x) paste0(x,collapse=" "))
+    ret <- cbind(sharedWords,is_duplicate)
+    colnames(ret)[1] <- "sharedPhrases"
+  } else {
+    ret <- NULL
+  }
+  ret
+}
+
+nCrossQuestionDiagnostics <- function(train, stopwords=TRUE) {
+  word.tuples <- mapply(getCrossMatch, train$question1,train$question2,train$is_duplicate,stopwords,USE.NAMES=FALSE, SIMPLIFY=TRUE)
+  word.tuples <- list.clean(word.tuples, fun = is.null, recursive = FALSE)
+  word.tuples <- list.rbind(word.tuples)
+  word.tuples <- as.data.table(word.tuples)
+  word.tuples$is_duplicate <- as.numeric(word.tuples$is_duplicate)
+  setkeyv(word.tuples,c("sharedPhrases"))
+  tuple.mean.duplicate <- word.tuples[,j=list(prob=mean(is_duplicate),count=length(is_duplicate)),by=list(sharedPhrases)]
+  tuple.mean.duplicate  
+}
+
 # Tuple generation, words in both questions
 nWordDiagnostics <- function(train, n=2, match=TRUE, stemming=FALSE, stopwords=FALSE) {
   if (match==TRUE) {
@@ -307,7 +356,6 @@ WordMiss1ProbTopN <- function(question1,question2,nTupleTable=NULL,countMin=0,To
   } 
   list(prob=ret.prob,count=ret.count)
 }
-
 
 WordMatchProbTopN <- function(question1,question2,n=2,nTupleTable=NULL,countMin=0,TopN=1, decreasing=TRUE, stemming=FALSE) {
   t1 <- tokenize_ngrams(question1,n=1,n_min=1,simplify = TRUE)
@@ -427,6 +475,8 @@ calcAndSaveNGramTables <- function(tupleSample, fileName = "Quora NGrams Train")
   nWordMiss2 <- nWordDiagnostics(train[tupleSample],2,match=FALSE)
   print("next")
   nWordMiss2Stem <- nWordDiagnostics(train[tupleSample],2,match=FALSE,stemming=TRUE)
+  print("next")
+  nCrossQuestion <- nCrossQuestionDiagnostics(train[tupleSample])
   print("next")
   nTuple3 <- nTupleDiagnostics(3,train[tupleSample])
   print("next")
