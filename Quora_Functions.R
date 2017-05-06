@@ -237,25 +237,23 @@ getNWordMiss <- function(question1,question2,is_duplicate,n=2, stemming=FALSE,st
 WordCrossProbTopN <- function(question1,question2,nTupleTable=NULL,countMin=0,TopN=1, decreasing=TRUE, stopwords=stopWords) {
   t1 <- tokenize_ngrams(question1,n=1,n_min=1,simplify = TRUE, stopwords = stopwords)
   t2 <- tokenize_ngrams(question2,n=1,n_min=1,simplify = TRUE, stopwords = stopwords)
-
-  sharedWords <- intersect(t1,t2)
-  if (length(sharedWords) > (n-1)) {
-    sharedPhrases <- t(combn(sharedWords,n))
-    sharedPhrases <- t(apply(sharedPhrases,1,function(x) x[order(x)]))
-    sharedPhrases <- apply(sharedPhrases,1,function(x) paste0(x,collapse=" "))
-    matches <- nTupleTable[sharedPhrases]
+  sharedWords <- expand.grid(t1,t2)
+  
+  if (length(sharedWords) > 0) {
+    sharedWords <- t(apply(sharedWords,1,function(x) x[order(x)]))
+    sharedWords <- apply(sharedWords,1,function(x) paste0(x,collapse=" "))
+    matches <- nTupleTable[sharedWords]
     matches <- matches[!is.na(matches$count)]
     matches <- matches[order(prob,decreasing=decreasing)]
     #idx <- which(nTupleTable$sharedPhrases %in% sharedPhrases & nTupleTable$count > countMin)
-    ret.prob <-matches[matches$count > countMin]$prob[TopN]
-    ret.count <-matches[matches$count > countMin]$count[TopN]
+    ret.prob <-matches[matches$count > countMin]$prob[1:TopN]
+    ret.count <-matches[matches$count > countMin]$count[1:TopN]
   } else {
     ret.prob <- NA 
     ret.count <- NA 
   }
   list(prob=ret.prob,count=ret.count)
 }
-
 
 getCrossMatch <- function(question1,question2,is_duplicate,stopwords) {
   t1 <- tokenize_ngrams(question1,n=1,n_min=1,simplify = TRUE, stopwords = stopwords)
@@ -503,7 +501,7 @@ traintestAddColumn <- function(sample,train) {
     # # # 
     t1 <- unlist(strsplit(tolower(train$question1[i]), " "))
     t2 <- unlist(strsplit(tolower(train$question2[i]), " "))
-    train[i,firstWordEqual := ifelse(t1[1]==t2[1],1,0)]
+    #train[i,firstWordEqual := ifelse(t1[1]==t2[1],1,0)]
     # remove stop words
     t1 <- setdiff(t1,stopWords)
     t2 <- setdiff(t2,stopWords)
@@ -513,10 +511,10 @@ traintestAddColumn <- function(sample,train) {
     train[i,nGramHitRate := ifelse(is.infinite(nGramHitRate),0,nGramHitRate)]
     
     # Now N Tuples Max
-    ret <- TupleProbTopN(train$question1[i],train$question2[i],n=1,nTupleTable=nTuple1,countMin=0,TopN=1, decreasing=TRUE)
-    train[i,Tuple1ProbMax:= ret$prob]
-    train[i,Tuple1CountMax:= ret$count]
-    
+    # ret <- TupleProbTopN(train$question1[i],train$question2[i],n=1,nTupleTable=nTuple1,countMin=0,TopN=1, decreasing=TRUE)
+    # train[i,Tuple1ProbMax:= ret$prob]
+    # train[i,Tuple1CountMax:= ret$count]
+    # 
     ret <- TupleProbTopNMiss(train$question1[i],train$question2[i],n=1,nTupleTable=nTuple1Miss,countMin = 0, TopN = 1, decreasing=FALSE )
     train[i,Tuple1ProbTop1Min:= ret$prob]
     train[i,Tuple1CountTop1Min:= ret$count]
@@ -529,10 +527,10 @@ traintestAddColumn <- function(sample,train) {
     train[i,WordMatch2ProbTop1:= ret$prob]
     train[i,WordMatch2CountTop1:= ret$count]
     
-    ret <- WordMatchProbTopN(train$question1[i],train$question2[i],n=3,nTupleTable=nWordMatch3,countMin = 0, TopN = 1, decreasing=TRUE )
-    train[i,WordMatch3ProbTop1:= ret$prob]
-    train[i,WordMatch3CountTop1:= ret$count]
-    
+    # ret <- WordMatchProbTopN(train$question1[i],train$question2[i],n=3,nTupleTable=nWordMatch3,countMin = 0, TopN = 1, decreasing=TRUE )
+    # train[i,WordMatch3ProbTop1:= ret$prob]
+    # train[i,WordMatch3CountTop1:= ret$count]
+    # 
     ret <- WordMissProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nWordMiss2,countMin = 0, TopN = 1, decreasing=FALSE )
     train[i,WordMiss2ProbTop1:= ret$prob]
     train[i,WordMiss2CountTop1:= ret$count]
@@ -541,15 +539,15 @@ traintestAddColumn <- function(sample,train) {
     train[i,WordMiss2ProbTop1Max:= ret$prob]
     train[i,WordMiss2CountTop1Max:= ret$count]
     
-    ret <- WordMissProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nWordMiss2,countMin = 0, TopN = 2, decreasing=FALSE )
-    train[i,WordMiss2ProbTop2:= ret$prob]
-    train[i,WordMiss2CountTop2:= ret$count]
-    
-    ret <- WordMatchProbTopN(train$question1[i],train$question2[i],n=2,
-                             nTupleTable=nWordMatch2Stem,countMin = 0, TopN = 1, decreasing=TRUE, stemming=TRUE )
-    train[i,WordMatch2ProbTop1Stem:= ret$prob]
-    train[i,WordMatch2CountTop1Stem:= ret$count]
-    
+    # ret <- WordMissProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nWordMiss2,countMin = 0, TopN = 2, decreasing=FALSE )
+    # train[i,WordMiss2ProbTop2:= ret$prob]
+    # train[i,WordMiss2CountTop2:= ret$count]
+    # 
+    # ret <- WordMatchProbTopN(train$question1[i],train$question2[i],n=2,
+    #                          nTupleTable=nWordMatch2Stem,countMin = 0, TopN = 1, decreasing=TRUE, stemming=TRUE )
+    # train[i,WordMatch2ProbTop1Stem:= ret$prob]
+    # train[i,WordMatch2CountTop1Stem:= ret$count]
+    # 
     j = j+1
   }
 
@@ -589,6 +587,42 @@ WordMissProbTopNCheck <- function(question1,question2,n=2,nTupleTable=NULL,TopN=
       #ret.prob <-sum(matches$prob[1:upper]*matches$count[1:upper])/sum(matches$count[1:upper])
       ret.prob <-mean(matches$prob[1:upper])
       ret.count <-sum(matches$count[1:upper])
+    } 
+  }
+  list(prob=ret.prob,count=ret.count)
+}
+
+WordMissProbAllTopN <- function(question1,question2,n=2,nTupleTable=NULL,countMin=0,TopN=1, decreasing=FALSE, stemming=FALSE) {
+  t1 <- tokenize_ngrams(question1,n=1,n_min=1,simplify = TRUE)
+  if (stemming==TRUE) {
+    t1 <- wordStem(t1)
+  }
+  sharedPhrases1 <- NULL
+  sharedPhrases2 <- NULL
+  if (length(t1) >1 ) {
+    sharedPhrases1 <- t(combn(t1,n))
+    sharedPhrases1 <- t(apply(sharedPhrases1,1,function(x) x[order(x)]))
+    sharedPhrases1 <- apply(sharedPhrases1,1,function(x) paste0(x,collapse=" "))
+  }
+  t2 <- tokenize_ngrams(question2,n=1,n_min=1,simplify = TRUE)
+  if (stemming==TRUE) {
+    t2 <- wordStem(t2)
+  }
+  if (length(t2) >1) {
+    sharedPhrases2 <- t(combn(t2,n))
+    sharedPhrases2 <- t(apply(sharedPhrases2,1,function(x) x[order(x)]))
+    sharedPhrases2 <- apply(sharedPhrases2,1,function(x) paste0(x,collapse=" "))
+  }
+  ret.prob <- NA
+  ret.count <- NA
+  if (length(sharedPhrases1>0) & length(sharedPhrases2>0)) {
+    sharedPhrases <- union(setdiff(sharedPhrases1,sharedPhrases2),setdiff(sharedPhrases2,sharedPhrases1))
+    if (length(sharedPhrases)>0) {
+      matches <- nTupleTable[sharedPhrases]
+      matches <- matches[!is.na(matches$count)]
+      matches <- matches[order(prob,decreasing=decreasing)]
+      ret.prob <-matches[matches$count > countMin]$prob[1:TopN]
+      ret.count <-matches[matches$count > countMin]$count[1:TopN]
     } 
   }
   list(prob=ret.prob,count=ret.count)

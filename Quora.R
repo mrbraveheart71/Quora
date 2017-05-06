@@ -38,9 +38,8 @@ calcAndSaveNGramTables(tupleSample, fileName = trainNGramFileName)
 
 load(trainNGramFileName)
 #sample <- sample(sample,50000)
-
 train <- traintestAddColumn(sample,train)
-  
+
 samplePos <- intersect(which(train$is_duplicate==1),sample)
 sampleNeg <- intersect(which(train$is_duplicate==0),sample)
 positivePct <- length(samplePos)/length(sample)
@@ -63,34 +62,42 @@ j <- 1
 for (i in sample) {
   print(j)
   
-  ret <- WordMissProbTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nWordMiss2,countMin = 3, TopN = 1, decreasing=FALSE )
-  train[i,WordMiss2ProbTop1Min3:= ret$prob]
-  train[i,WordMiss2CountTop1Min3:= ret$count]
+  ret <- WordMissProbAllTopN(train$question1[i],train$question2[i],n=2,nTupleTable=nWordMiss2,countMin = 0, TopN = 5, decreasing=FALSE )
+  train[i,WordMiss2ProbTop1:= ret$prob[1]]
+  train[i,WordMiss2CountTop1:= ret$count[1]]
+  train[i,WordMiss2ProbTop2:= ret$prob[2]]
+  train[i,WordMiss2CountTop2:= ret$count[2]]
+  train[i,WordMiss2ProbTop3:= ret$prob[3]]
+  train[i,WordMiss2CountTop3:= ret$count[3]]
+  train[i,WordMiss2ProbTop4:= ret$prob[4]]
+  train[i,WordMiss2CountTop4:= ret$count[4]]
+  train[i,WordMiss2ProbTop5:= ret$prob[5]]
+  train[i,WordMiss2CountTop5:= ret$count[5]]
   
   j = j+1
 }
-idx <- which(!is.na(train$WordMiss2ProbTop1[sample]))
-cor(train$WordMiss2ProbTop1[sample[idx]],train$is_duplicate[sample[idx]])
+
+idx <- which(!is.na(train$WordCrossProbTop1MinMin3[sample]))
+cor(train$WordCrossProbTop1MinMin3[sample[idx]],train$is_duplicate[sample[idx]])
 
 feature.names <- c("nGramHitRate",
                    "nGramHitRate11_0","nGramHitRate22_0",
                    "Tuple1ProbTop1Min","Tuple1CountTop1Min",
                    "Tuple2ProbTop1Min","Tuple2CountTop1Min",
                    "WordMatch2ProbTop1","WordMatch2CountTop1",
-                   "WordMatch3ProbTop1","WordMatch3CountTop1",
-                   "WordMatch2ProbTop1Stem","WordMatch2CountTop1Stem",
-                   "WordMiss2ProbTop1Min3","WordMiss2CountTop1Min3",
+                   #"WordMatch3ProbTop1","WordMatch3CountTop1",
+                   #"WordMatch2ProbTop1Stem","WordMatch2CountTop1Stem",
                    "WordMiss2ProbTop1","WordMiss2CountTop1",
-                   "WordMiss2ProbTop2","WordMiss2CountTop2",
-                   "WordMiss2ProbTop1Max","WordMiss2CountTop1Max",
-                   #"WordMiss2ProbTop1Stem","WordMiss2CountTop1Stem",
-                   "Tuple1ProbMax","Tuple1CountMax")
+                   #"WordMiss2ProbTop2","WordMiss2CountTop2",
+                   "WordMiss2ProbTop1Max","WordMiss2CountTop1Max"
+                   #"Tuple1ProbMax","Tuple1CountMax"
+                   )
 
 col.names <- c("id","qid1","qid2","question1","question2","is_duplicate")
 col.names <- c(col.names,feature.names)
 #train <- train[,col.names,with=FALSE]
 
-xgb_params = list(seed = 0,subsample = 0.8,eta = 0.1,max_depth =3,num_parallel_tree = 1,min_child_weight = 2,
+xgb_params = list(seed = 0,subsample = 1,eta = 0.1,max_depth =4,num_parallel_tree = 1,min_child_weight = 2,
                   objective='binary:logistic',eval_metric = 'logloss')
 
 dtrain = xgb.DMatrix(as.matrix(train[s,feature.names,with=FALSE]), label=train$is_duplicate[s], missing=NA)
@@ -108,6 +115,11 @@ xgb.importance(feature.names,xgboost.fit)
 save(list=c("xgboost.fit","feature.names","train","s","v","sample"), file="Quora Save Model")
 
 load("Quora Save Model")
+
+# Apply model to test data
+test <- traintestAddColumn(1:10000,test)
+dtest <- xgb.DMatrix(as.matrix(test[1:10000,feature.names,with=FALSE]), missing=NA)
+test$pred[1:10000] <- predict(xgboost.fit,dtest)
 
 # Mistakes made
 train.final <- train[sample]
